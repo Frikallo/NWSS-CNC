@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="377.953mm" height="377.953mm" viewBox="0 0 377.953 377.953" xmlns="http://www.w3.org/2000/svg">
+  <!-- Original shapes with 50% opacity -->
+  <g opacity="0.5">
+    <path d="M10,10 C20,10 30,10 40,10 C40,16.6667 40,23.3333 40,30 C30,30 20,30 10,30 C10,23.3333 10,16.6667 10,10 " fill="#ff" stroke="#0" stroke-width="1" />
+    <path d="M85,20 C85,28.2843 78.2843,35 70,35 C61.7157,35 55,28.2843 55,20 C55,11.7157 61.7157,5 70,5 C78.2843,5 85,11.7157 85,20 C85,20 85,20 85,20 " fill="#ff00" stroke="#0" stroke-width="1" />
+    <path d="M10,60 C36.6667,60 63.3333,60 90,60 " fill="#0" stroke="#ff0000" stroke-width="2" />
+    <path d="M30,80 C43.3333,80 56.6667,80 70,80 C63.3333,83.3333 56.6667,86.6667 50,90 C43.3333,86.6667 36.6667,83.3333 30,80 " fill="#ffff" stroke="#0" stroke-width="1" />
+    <path d="M20,40 C40,20 60,60 80,40 " fill="#0" stroke="#800080" stroke-width="2" />
+  </g>
+  <!-- Discretized points -->
+  <polyline points="10,10 13,10 16,10 19,10 22,10 25,10 28,10 31,10 34,10 37,10 40,10 40,12 40,14 40,16 40,18 40,20 40,22 40,24 40,26 40,28 40,30 37,30 34,30 31,30 28,30 25,30 22,30 19,30 16,30 13,30 10,30 10,28 10,26 10,24 10,22 10,20 10,18 10,16 10,14 10,12 10,10 " fill="none" stroke="red" stroke-width="0.5" />
+  <circle cx="10" cy="10" r="0.5" fill="blue" />
+  <circle cx="13" cy="10" r="0.5" fill="blue" />
+  <circle cx="16" cy="10" r="0.5" fill="blue" />
+  <circle cx="19" cy="10" r="0.5" fill="blue" />
+  <circle cx="22" cy="10" r="0.5" fill="blue" />
+  <circle cx="25" cy="10" r="0.5" fill="blue" />
+  <circle cx="28" cy="10" r="0.5" fill="blue" />
+  <circle cx="31" cy="10" r="0.5" fill="blue" />
+  <circle cx="34" cy="10" r="0.5" fill="blue" />
+  <circle cx="37" cy="10" r="0.5" fill="blue" />
+  <circle cx="40" cy="10" r="0.5" fill="blue" />
+  <circle cx="40" cy="12" r="0.5" fill="blue" />
+  <circle cx="40" cy="14" r="0.5" fill="blue" />
+  <circle cx="40" cy="16" r="0.5" fill="blue" />
+  <circle cx="40" cy="18" r="0.5" fill="blue" />
+  <circle cx="40" cy="20" r="0.5" fill="blue" />
+  <circle cx="40" cy="22" r="0.5" fill="blue" />
+  <circle cx="40" cy="24" r="0.5" fill="blue" />
+  <circle cx="40" cy="26" r="0.5" fill="blue" />
+  <circle cx="40" cy="28" r="0.5" fill="blue" />
+  <circle cx="40" cy="30" r="0.5" fill="blue" />
+  <circle cx="37" cy="30" r="0.5" fill="blue" />
+  <circle cx="34" cy="30" r="0.5" fill="blue" />
+  <circle cx="31" cy="30" r="0.5" fill="blue" />
+  <circle cx="28" cy="30" r="0.5" fill="blue" />
+  <circle cx="25" cy="30" r="0.5" fill="blue" />
+  <circle cx="22" cy="30" r="0.5" fill="blue" />
+  <circle cx="19" cy="30" r="0.5" fill="blue" />
+  <circle cx="16" cy="30" r="0.5" fill="blue" />
+  <circle cx="13" cy="30" r="0.5" fill="blue" />
+  <circle cx="10" cy="30" r="0.5" fill="blue" />
+  <circle cx="10" cy="28" r="0.5" fill="blue" />
+  <circle cx="10" cy="26" r="0.5" fill="blue" />
+  <circle cx="10" cy="24" r="0.5" fill="blue" />
+  <circle cx="10" cy="22" r="0.5" fill="blue" />
+  <circle cx="10" cy="20" r="0.5" fill="blue" />
+  <circle cx="10" cy="18" r="0.5" fill="blue" />
+  <circle cx="10" cy="16" r="0.5" fill="blue" />
+  <circle cx="10" cy="14" r="0.5" fill="blue" />
+  <circle cx="10" cy="12" r="0.5" fill="blue" />
+  <circle cx="10" cy="10" r="0.5" fill="blue" />
+  <polyline points="85,20 84.8037,22.4331 84.2353,24.7412 83.3257,26.8934 82.1059,28.8588 80.6066,30.6066 78.8588,32.1059 76.8934,33.3257 74.7412,34.2353 72.4331,34.8037 70,35 67.5669,34.8037 65.2588,34.2353 63.1066,33.3257 61.1412,32.1059 59.3934,30.6066 57.8941,28.8588 56.6743,26.8934 55.7647,24.7412 55.1963,22.4331 55,20 55.1963,17.5669 55.7647,15.2588 56.6743,13.1066 57.8941,11.1412 59.3934,9.3934 61.1412,7.89413 63.1066,6.67427 65.2588,5.76471 67.5669,5.19632 70,5 72.4331,5.19632 74.7412,5.76471 76.8934,6.67427 78.8588,7.89413 80.6066,9.3934 82.1059,11.1412 83.3257,13.1066 84.2353,15.2588 84.8037,17.5669 85,20 85,20 85,20 85,20 85,20 85,20 85,20 85,20 85,20 85,20 85,20 " fill="none" stroke="red" stroke-width="0.5" />
+  <circle cx="85" cy="20" r="0.5" fill="blue" />
+  <circle cx="84.8037" cy="22.4331" r="0.5" fill="blue" />
+  <circle cx="84.2353" cy="24.7412" r="0.5" fill="blue" />
+  <circle cx="83.3257" cy="26.8934" r="0.5" fill="blue" />
+  <circle cx="82.1059" cy="28.8588" r="0.5" fill="blue" />
+  <circle cx="80.6066" cy="30.6066" r="0.5" fill="blue" />
+  <circle cx="78.8588" cy="32.1059" r="0.5" fill="blue" />
+  <circle cx="76.8934" cy="33.3257" r="0.5" fill="blue" />
+  <circle cx="74.7412" cy="34.2353" r="0.5" fill="blue" />
+  <circle cx="72.4331" cy="34.8037" r="0.5" fill="blue" />
+  <circle cx="70" cy="35" r="0.5" fill="blue" />
+  <circle cx="67.5669" cy="34.8037" r="0.5" fill="blue" />
+  <circle cx="65.2588" cy="34.2353" r="0.5" fill="blue" />
+  <circle cx="63.1066" cy="33.3257" r="0.5" fill="blue" />
+  <circle cx="61.1412" cy="32.1059" r="0.5" fill="blue" />
+  <circle cx="59.3934" cy="30.6066" r="0.5" fill="blue" />
+  <circle cx="57.8941" cy="28.8588" r="0.5" fill="blue" />
+  <circle cx="56.6743" cy="26.8934" r="0.5" fill="blue" />
+  <circle cx="55.7647" cy="24.7412" r="0.5" fill="blue" />
+  <circle cx="55.1963" cy="22.4331" r="0.5" fill="blue" />
+  <circle cx="55" cy="20" r="0.5" fill="blue" />
+  <circle cx="55.1963" cy="17.5669" r="0.5" fill="blue" />
+  <circle cx="55.7647" cy="15.2588" r="0.5" fill="blue" />
+  <circle cx="56.6743" cy="13.1066" r="0.5" fill="blue" />
+  <circle cx="57.8941" cy="11.1412" r="0.5" fill="blue" />
+  <circle cx="59.3934" cy="9.3934" r="0.5" fill="blue" />
+  <circle cx="61.1412" cy="7.89413" r="0.5" fill="blue" />
+  <circle cx="63.1066" cy="6.67427" r="0.5" fill="blue" />
+  <circle cx="65.2588" cy="5.76471" r="0.5" fill="blue" />
+  <circle cx="67.5669" cy="5.19632" r="0.5" fill="blue" />
+  <circle cx="70" cy="5" r="0.5" fill="blue" />
+  <circle cx="72.4331" cy="5.19632" r="0.5" fill="blue" />
+  <circle cx="74.7412" cy="5.76471" r="0.5" fill="blue" />
+  <circle cx="76.8934" cy="6.67427" r="0.5" fill="blue" />
+  <circle cx="78.8588" cy="7.89413" r="0.5" fill="blue" />
+  <circle cx="80.6066" cy="9.3934" r="0.5" fill="blue" />
+  <circle cx="82.1059" cy="11.1412" r="0.5" fill="blue" />
+  <circle cx="83.3257" cy="13.1066" r="0.5" fill="blue" />
+  <circle cx="84.2353" cy="15.2588" r="0.5" fill="blue" />
+  <circle cx="84.8037" cy="17.5669" r="0.5" fill="blue" />
+  <circle cx="85" cy="20" r="0.5" fill="blue" />
+  <circle cx="85" cy="20" r="0.5" fill="blue" />
+  <circle cx="85" cy="20" r="0.5" fill="blue" />
+  <circle cx="85" cy="20" r="0.5" fill="blue" />
+  <circle cx="85" cy="20" r="0.5" fill="blue" />
+  <circle cx="85" cy="20" r="0.5" fill="blue" />
+  <circle cx="85" cy="20" r="0.5" fill="blue" />
+  <circle cx="85" cy="20" r="0.5" fill="blue" />
+  <circle cx="85" cy="20" r="0.5" fill="blue" />
+  <circle cx="85" cy="20" r="0.5" fill="blue" />
+  <circle cx="85" cy="20" r="0.5" fill="blue" />
+  <polyline points="10,60 18,60 26,60 34,60 42,60 50,60 58,60 66,60 74,60 82,60 90,60 " fill="none" stroke="red" stroke-width="0.5" />
+  <circle cx="10" cy="60" r="0.5" fill="blue" />
+  <circle cx="18" cy="60" r="0.5" fill="blue" />
+  <circle cx="26" cy="60" r="0.5" fill="blue" />
+  <circle cx="34" cy="60" r="0.5" fill="blue" />
+  <circle cx="42" cy="60" r="0.5" fill="blue" />
+  <circle cx="50" cy="60" r="0.5" fill="blue" />
+  <circle cx="58" cy="60" r="0.5" fill="blue" />
+  <circle cx="66" cy="60" r="0.5" fill="blue" />
+  <circle cx="74" cy="60" r="0.5" fill="blue" />
+  <circle cx="82" cy="60" r="0.5" fill="blue" />
+  <circle cx="90" cy="60" r="0.5" fill="blue" />
+  <polyline points="30,80 34,80 38,80 42,80 46,80 50,80 54,80 58,80 62,80 66,80 70,80 68,81 66,82 64,83 62,84 60,85 58,86 56,87 54,88 52,89 50,90 48,89 46,88 44,87 42,86 40,85 38,84 36,83 34,82 32,81 30,80 " fill="none" stroke="red" stroke-width="0.5" />
+  <circle cx="30" cy="80" r="0.5" fill="blue" />
+  <circle cx="34" cy="80" r="0.5" fill="blue" />
+  <circle cx="38" cy="80" r="0.5" fill="blue" />
+  <circle cx="42" cy="80" r="0.5" fill="blue" />
+  <circle cx="46" cy="80" r="0.5" fill="blue" />
+  <circle cx="50" cy="80" r="0.5" fill="blue" />
+  <circle cx="54" cy="80" r="0.5" fill="blue" />
+  <circle cx="58" cy="80" r="0.5" fill="blue" />
+  <circle cx="62" cy="80" r="0.5" fill="blue" />
+  <circle cx="66" cy="80" r="0.5" fill="blue" />
+  <circle cx="70" cy="80" r="0.5" fill="blue" />
+  <circle cx="68" cy="81" r="0.5" fill="blue" />
+  <circle cx="66" cy="82" r="0.5" fill="blue" />
+  <circle cx="64" cy="83" r="0.5" fill="blue" />
+  <circle cx="62" cy="84" r="0.5" fill="blue" />
+  <circle cx="60" cy="85" r="0.5" fill="blue" />
+  <circle cx="58" cy="86" r="0.5" fill="blue" />
+  <circle cx="56" cy="87" r="0.5" fill="blue" />
+  <circle cx="54" cy="88" r="0.5" fill="blue" />
+  <circle cx="52" cy="89" r="0.5" fill="blue" />
+  <circle cx="50" cy="90" r="0.5" fill="blue" />
+  <circle cx="48" cy="89" r="0.5" fill="blue" />
+  <circle cx="46" cy="88" r="0.5" fill="blue" />
+  <circle cx="44" cy="87" r="0.5" fill="blue" />
+  <circle cx="42" cy="86" r="0.5" fill="blue" />
+  <circle cx="40" cy="85" r="0.5" fill="blue" />
+  <circle cx="38" cy="84" r="0.5" fill="blue" />
+  <circle cx="36" cy="83" r="0.5" fill="blue" />
+  <circle cx="34" cy="82" r="0.5" fill="blue" />
+  <circle cx="32" cy="81" r="0.5" fill="blue" />
+  <circle cx="30" cy="80" r="0.5" fill="blue" />
+  <polyline points="20,40 26,35.68 32,34.24 38,34.96 44,37.12 50,40 56,42.88 62,45.04 68,45.76 74,44.32 80,40 " fill="none" stroke="red" stroke-width="0.5" />
+  <circle cx="20" cy="40" r="0.5" fill="blue" />
+  <circle cx="26" cy="35.68" r="0.5" fill="blue" />
+  <circle cx="32" cy="34.24" r="0.5" fill="blue" />
+  <circle cx="38" cy="34.96" r="0.5" fill="blue" />
+  <circle cx="44" cy="37.12" r="0.5" fill="blue" />
+  <circle cx="50" cy="40" r="0.5" fill="blue" />
+  <circle cx="56" cy="42.88" r="0.5" fill="blue" />
+  <circle cx="62" cy="45.04" r="0.5" fill="blue" />
+  <circle cx="68" cy="45.76" r="0.5" fill="blue" />
+  <circle cx="74" cy="44.32" r="0.5" fill="blue" />
+  <circle cx="80" cy="40" r="0.5" fill="blue" />
+</svg>

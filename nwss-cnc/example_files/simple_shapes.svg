@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="100mm" height="100mm" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Rectangle -->
+  <rect x="10" y="10" width="30" height="20" fill="#ff0000" stroke="#000000" stroke-width="1" id="rectangle"/>
+  
+  <!-- Circle -->
+  <circle cx="70" cy="20" r="15" fill="#00ff00" stroke="#000000" stroke-width="1" id="circle"/>
+  
+  <!-- Line -->
+  <line x1="10" y1="60" x2="90" y2="60" stroke="#0000ff" stroke-width="2" id="line"/>
+  
+  <!-- Path (simple triangle) -->
+  <path d="M 30,80 L 70,80 L 50,90 Z" fill="#ffff00" stroke="#000000" stroke-width="1" id="triangle"/>
+  
+  <!-- Path with bezier curves -->
+  <path d="M 20,40 C 40,20 60,60 80,40" fill="none" stroke="#800080" stroke-width="2" id="curve"/>
+</svg>
