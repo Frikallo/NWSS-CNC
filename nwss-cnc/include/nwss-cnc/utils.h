@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include "nwss-cnc/geometry.h"
+#include "nwss-cnc/config.h"
 
 namespace nwss {
 namespace cnc {
@@ -17,6 +18,11 @@ public:
     static bool generateVisualization(const std::string& sourceFile, 
                                     const std::vector<Path>& paths,
                                     const std::string& outputFile);
+    
+    // Generate a visualization showing how the design fits on the material and bed
+    static bool generateMaterialVisualization(const std::vector<Path>& paths, 
+                                           const CNConfig& config,
+                                           const std::string& outputFile);
     
     // Convert an RGBA color value to a hex string
     static std::string colorToHex(uint32_t color);

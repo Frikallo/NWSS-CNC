@@ -1,5 +1,6 @@
 #include "nwss-cnc/utils.h"
 #include "nwss-cnc/svg_parser.h"
+#include "nwss-cnc/config.h"
 #include "third_party/nanosvg.h"
 
 #include <fstream>
@@ -115,6 +116,112 @@ bool Utils::generateVisualization(const std::string& sourceFile,
     }
     
     vizFile << "</svg>" << std::endl;
+    vizFile.close();
+    return true;
+}
+
+bool Utils::generateMaterialVisualization(const std::vector<Path>& paths, 
+                                        const CNConfig& config,
+                                        const std::string& outputFile) {
+    double materialWidth = config.getMaterialWidth();
+    double materialHeight = config.getMaterialHeight();
+    double bedWidth = config.getBedWidth();
+    double bedHeight = config.getBedHeight();
+    std::string units = config.getUnitsString();
+    
+    // Create SVG file
+    std::ofstream vizFile(outputFile);
+    if (!vizFile.is_open()) {
+        std::cerr << "Error: Could not open file for writing: " << outputFile << std::endl;
+        return false;
+    }
+    
+    // Get maximum dimensions to show
+    double maxWidth = std::max(materialWidth, bedWidth) * 1.1;  // 10% margin
+    double maxHeight = std::max(materialHeight, bedHeight) * 1.1;  // 10% margin
+    
+    // Generate SVG file with bed, material, and design visualization
+    vizFile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>" << std::endl;
+    vizFile << "<svg width=\"" << maxWidth << units << "\" height=\"" << maxHeight 
+            << units << "\" viewBox=\"" << -maxWidth * 0.05 << " " << -maxHeight * 0.05 
+            << " " << maxWidth << " " << maxHeight 
+            << "\" xmlns=\"http://www.w3.org/2000/svg\">" << std::endl;
+    
+    // Add title
+    vizFile << "  <title>NWSS CNC Material and Cut Visualization</title>" << std::endl;
+    
+    // Draw CNC bed outline
+    vizFile << "  <!-- CNC Bed -->" << std::endl;
+    vizFile << "  <rect x=\"0\" y=\"0\" width=\"" << bedWidth << "\" height=\"" << bedHeight 
+            << "\" fill=\"#f0f0f0\" stroke=\"#888888\" stroke-width=\"1\" />" << std::endl;
+    
+    // Add bed label
+    vizFile << "  <text x=\"" << bedWidth / 2 << "\" y=\"" << bedHeight * 0.1 
+            << "\" font-family=\"Arial\" font-size=\"10\" text-anchor=\"middle\">"
+            << "CNC Bed (" << bedWidth << " x " << bedHeight << " " << units << ")</text>" << std::endl;
+    
+    // Draw material outline
+    vizFile << "  <!-- Material -->" << std::endl;
+    vizFile << "  <rect x=\"0\" y=\"0\" width=\"" << materialWidth << "\" height=\"" << materialHeight 
+            << "\" fill=\"#e0e0e0\" stroke=\"#444444\" stroke-width=\"1\" />" << std::endl;
+    
+    // Add material label
+    vizFile << "  <text x=\"" << materialWidth / 2 << "\" y=\"" << materialHeight * 0.2 
+            << "\" font-family=\"Arial\" font-size=\"8\" text-anchor=\"middle\">"
+            << "Material (" << materialWidth << " x " << materialHeight << " " << units << ")</text>" << std::endl;
+    
+    // Draw coordinate system
+    vizFile << "  <!-- Coordinate System -->" << std::endl;
+    vizFile << "  <line x1=\"0\" y1=\"0\" x2=\"20\" y2=\"0\" stroke=\"red\" stroke-width=\"0.5\" />" << std::endl;
+    vizFile << "  <line x1=\"0\" y1=\"0\" x2=\"0\" y2=\"20\" stroke=\"green\" stroke-width=\"0.5\" />" << std::endl;
+    vizFile << "  <text x=\"22\" y=\"4\" font-family=\"Arial\" font-size=\"6\" fill=\"red\">X</text>" << std::endl;
+    vizFile << "  <text x=\"2\" y=\"22\" font-family=\"Arial\" font-size=\"6\" fill=\"green\">Y</text>" << std::endl;
+    
+    // Draw paths (the actual cut design)
+    vizFile << "  <!-- Cut Paths -->" << std::endl;
+    vizFile << "  <g fill=\"none\" stroke=\"blue\" stroke-width=\"0.75\">" << std::endl;
+    
+    // Draw each path with points
+    for (size_t pathIndex = 0; pathIndex < paths.size(); pathIndex++) {
+        const auto& points = paths[pathIndex].getPoints();
+        if (points.empty()) continue;
+        
+        // Draw polyline for the path
+        vizFile << "    <polyline points=\"";
+        for (const auto& point : points) {
+            vizFile << point.x << "," << point.y << " ";
+        }
+        vizFile << "\" />" << std::endl;
+        
+        // Draw dots at each point
+        for (size_t i = 0; i < points.size(); i++) {
+            // Only draw dots for start and end points and every 10th point to reduce clutter
+            if (i == 0 || i == points.size() - 1 || i % 10 == 0) {
+                vizFile << "    <circle cx=\"" << points[i].x << "\" cy=\"" << points[i].y 
+                        << "\" r=\"0.6\" fill=\"" << (i == 0 ? "green" : (i == points.size() - 1 ? "red" : "blue")) << "\" />" << std::endl;
+            }
+        }
+    }
+    
+    vizFile << "  </g>" << std::endl;
+    
+    // Add legend
+    vizFile << "  <!-- Legend -->" << std::endl;
+    vizFile << "  <g transform=\"translate(" << maxWidth * 0.7 << ", " << maxHeight * 0.8 << ")\">" << std::endl;
+    vizFile << "    <rect x=\"0\" y=\"0\" width=\"" << maxWidth * 0.25 << "\" height=\"" << maxHeight * 0.15 
+            << "\" fill=\"white\" stroke=\"black\" stroke-width=\"0.5\" />" << std::endl;
+    vizFile << "    <text x=\"5\" y=\"10\" font-family=\"Arial\" font-size=\"6\">Legend:</text>" << std::endl;
+    vizFile << "    <circle cx=\"7\" cy=\"20\" r=\"0.6\" fill=\"green\" />" << std::endl;
+    vizFile << "    <text x=\"12\" y=\"22\" font-family=\"Arial\" font-size=\"6\">Start points</text>" << std::endl;
+    vizFile << "    <circle cx=\"7\" cy=\"30\" r=\"0.6\" fill=\"red\" />" << std::endl;
+    vizFile << "    <text x=\"12\" y=\"32\" font-family=\"Arial\" font-size=\"6\">End points</text>" << std::endl;
+    vizFile << "    <polyline points=\"5,40 10,40\" stroke=\"blue\" stroke-width=\"0.75\" />" << std::endl;
+    vizFile << "    <text x=\"12\" y=\"42\" font-family=\"Arial\" font-size=\"6\">Cut paths</text>" << std::endl;
+    vizFile << "  </g>" << std::endl;
+    
+    // Close the SVG file
+    vizFile << "</svg>" << std::endl;
+    
     vizFile.close();
     return true;
 }

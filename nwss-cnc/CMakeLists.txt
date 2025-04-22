@@ -28,6 +28,7 @@ set(NWSS_CNC_SOURCES
     src/utils.cpp
     src/nanosvg_impl.cpp
     src/config.cpp
+    src/transform.cpp
 )
 
 # Create static library
