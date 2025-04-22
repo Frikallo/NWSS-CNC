@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 project(nwss-cnc VERSION 0.1.0 LANGUAGES CXX)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 17)  # Increased from 14 to 17 for std::filesystem
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -29,6 +29,7 @@ set(NWSS_CNC_SOURCES
     src/nanosvg_impl.cpp
     src/config.cpp
     src/transform.cpp
+    src/gcode_generator.cpp
 )
 
 # Create static library

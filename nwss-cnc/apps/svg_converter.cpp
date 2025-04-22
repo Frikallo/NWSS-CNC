@@ -10,6 +10,7 @@
 #include "nwss-cnc/utils.h"
 #include "nwss-cnc/config.h"
 #include "nwss-cnc/transform.h"
+#include "nwss-cnc/gcode_generator.h"
 
 #include <iostream>
 #include <string>
@@ -48,6 +49,8 @@ int main(int argc, char* argv[]) {
     std::string gCodeFile;
     bool generateMaterialViz = false;
     std::string materialVizFile;
+
+    GCodeOptions gCodeOptions;
     
     // Parse command line arguments
     for (int i = 2; i < argc; i++) {
@@ -151,32 +154,32 @@ int main(int argc, char* argv[]) {
     //----------------------------------------
     // Step 3: Process shapes and paths
     //----------------------------------------
-    std::cout << "\n=== Shape Processing ===\n";
-    int shapeCount = parser.getShapeCount();
-    std::cout << "Found " << shapeCount << " shapes:" << std::endl;
+    // std::cout << "\n=== Shape Processing ===\n";
+    // int shapeCount = parser.getShapeCount();
+    // std::cout << "Found " << shapeCount << " shapes:" << std::endl;
     
-    std::vector<SVGShapeInfo> shapeInfoList = parser.getShapeInfo();
-    for (int i = 0; i < shapeCount; i++) {
-        const auto& info = shapeInfoList[i];
-        std::cout << "Shape " << i << ":" << std::endl;
-        std::cout << "  ID: " << (info.id.empty() ? "(unnamed)" : info.id) << std::endl;
-        std::cout << "  Fill: " << Utils::colorToHex(info.fillColor) << std::endl;
-        std::cout << "  Stroke: " << Utils::colorToHex(info.strokeColor) << std::endl;
-        std::cout << "  Stroke Width: " << info.strokeWidth << std::endl;
-        std::cout << "  Bounds: [" << info.bounds[0] << ", " << info.bounds[1] 
-                  << ", " << info.bounds[2] << ", " << info.bounds[3] << "]" << std::endl;
+    // std::vector<SVGShapeInfo> shapeInfoList = parser.getShapeInfo();
+    // for (int i = 0; i < shapeCount; i++) {
+    //     const auto& info = shapeInfoList[i];
+    //     std::cout << "Shape " << i << ":" << std::endl;
+    //     std::cout << "  ID: " << (info.id.empty() ? "(unnamed)" : info.id) << std::endl;
+    //     std::cout << "  Fill: " << Utils::colorToHex(info.fillColor) << std::endl;
+    //     std::cout << "  Stroke: " << Utils::colorToHex(info.strokeColor) << std::endl;
+    //     std::cout << "  Stroke Width: " << info.strokeWidth << std::endl;
+    //     std::cout << "  Bounds: [" << info.bounds[0] << ", " << info.bounds[1] 
+    //               << ", " << info.bounds[2] << ", " << info.bounds[3] << "]" << std::endl;
         
-        // Get paths for this shape
-        NSVGshape* shape = parser.getShape(i);
-        std::vector<Path> shapePaths = discretizer.discretizeShape(shape);
+    //     // Get paths for this shape
+    //     NSVGshape* shape = parser.getShape(i);
+    //     std::vector<Path> shapePaths = discretizer.discretizeShape(shape);
         
-        std::cout << "  Paths: " << shapePaths.size() << std::endl;
-        for (size_t j = 0; j < shapePaths.size(); j++) {
-            const auto& path = shapePaths[j];
-            std::cout << "    Path " << j << ": " << path.size() << " points, length: " 
-                      << Utils::formatNumber(path.length(), 2) << " " << units << std::endl;
-        }
-    }
+    //     std::cout << "  Paths: " << shapePaths.size() << std::endl;
+    //     for (size_t j = 0; j < shapePaths.size(); j++) {
+    //         const auto& path = shapePaths[j];
+    //         std::cout << "    Path " << j << ": " << path.size() << " points, length: " 
+    //                   << Utils::formatNumber(path.length(), 2) << " " << units << std::endl;
+    //     }
+    // }
     
     //----------------------------------------
     // Step 4: Discretize the entire image
@@ -266,15 +269,24 @@ int main(int argc, char* argv[]) {
     }
     
     // Generate G-code if requested
-    // if (generateGCodeOutput) {
-    //     if (gCodeFile.empty()) {
-    //         gCodeFile = Utils::replaceExtension(svgFile, "gcode");
-    //     }
-    //     std::cout << "Generating G-code to: " << gCodeFile << std::endl;
-    //     if (generateGCode(allPaths, config, gCodeFile)) {
-    //         std::cout << "G-code file created successfully." << std::endl;
-    //     }
-    // }
+    if (generateGCodeOutput) {
+        if (gCodeFile.empty()) {
+            gCodeFile = Utils::replaceExtension(svgFile, "gcode");
+        }
+        
+        std::cout << "Generating G-code to: " << gCodeFile << std::endl;
+        
+        // Use the dedicated G-code generator
+        GCodeGenerator gCodeGen;
+        gCodeGen.setConfig(config);
+        gCodeGen.setOptions(gCodeOptions);
+        
+        if (gCodeGen.generateGCode(allPaths, gCodeFile)) {
+            std::cout << "G-code file created successfully." << std::endl;
+        } else {
+            std::cerr << "Error generating G-code file." << std::endl;
+        }
+    }
     
     // Clean up
     parser.freeImage();
