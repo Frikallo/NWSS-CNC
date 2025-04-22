@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 project(nwss-cnc VERSION 0.1.0 LANGUAGES CXX)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)  # Increased from 14 to 17 for std::filesystem
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -27,6 +27,7 @@ set(NWSS_CNC_SOURCES
     src/geometry.cpp
     src/utils.cpp
     src/nanosvg_impl.cpp
+    src/config.cpp
 )
 
 # Create static library
@@ -40,11 +41,15 @@ target_include_directories(nwss-cnc PUBLIC
 add_executable(svg-converter apps/svg_converter.cpp)
 target_link_libraries(svg-converter PRIVATE nwss-cnc)
 
+# Config wizard application
+add_executable(config-wizard apps/config_wizard.cpp)
+target_link_libraries(config-wizard PRIVATE nwss-cnc)
+
 # Copy example SVG files to build directory
 file(COPY ${PROJECT_SOURCE_DIR}/example_files/ DESTINATION ${CMAKE_BINARY_DIR}/example_files/)
 
 # Install targets
-install(TARGETS nwss-cnc svg-converter
+install(TARGETS nwss-cnc svg-converter config-wizard
     EXPORT nwss-cnc-targets
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib

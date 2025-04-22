@@ -9,4 +9,5 @@
 - [ ] Create onboarding CLI
 - [ ] Write documentation
 - [ ] Improve discretization algorithm
+- [ ] Add modes (direct cutout, etch, etc)
 - [ ] Create presentation
