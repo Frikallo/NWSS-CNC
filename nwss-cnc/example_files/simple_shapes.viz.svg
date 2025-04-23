@@ -1,162 +1,161 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg width="377.953mm" height="377.953mm" viewBox="0 0 377.953 377.953" xmlns="http://www.w3.org/2000/svg">
-  <!-- Original shapes with 50% opacity -->
-  <g opacity="0.5">
-    <path d="M10,10 C20,10 30,10 40,10 C40,16.6667 40,23.3333 40,30 C30,30 20,30 10,30 C10,23.3333 10,16.6667 10,10 " fill="#ff" stroke="#0" stroke-width="1" />
-    <path d="M85,20 C85,28.2843 78.2843,35 70,35 C61.7157,35 55,28.2843 55,20 C55,11.7157 61.7157,5 70,5 C78.2843,5 85,11.7157 85,20 C85,20 85,20 85,20 " fill="#ff00" stroke="#0" stroke-width="1" />
-    <path d="M10,60 C36.6667,60 63.3333,60 90,60 " fill="#0" stroke="#ff0000" stroke-width="2" />
-    <path d="M30,80 C43.3333,80 56.6667,80 70,80 C63.3333,83.3333 56.6667,86.6667 50,90 C43.3333,86.6667 36.6667,83.3333 30,80 " fill="#ffff" stroke="#0" stroke-width="1" />
-    <path d="M20,40 C40,20 60,60 80,40 " fill="#0" stroke="#800080" stroke-width="2" />
-  </g>
-  <!-- Discretized points -->
-  <polyline points="60,137.5 63,137.5 66,137.5 69,137.5 72,137.5 75,137.5 78,137.5 81,137.5 84,137.5 87,137.5 90,137.5 90,135.5 90,133.5 90,131.5 90,129.5 90,127.5 90,125.5 90,123.5 90,121.5 90,119.5 90,117.5 87,117.5 84,117.5 81,117.5 78,117.5 75,117.5 72,117.5 69,117.5 66,117.5 63,117.5 60,117.5 60,119.5 60,121.5 60,123.5 60,125.5 60,127.5 60,129.5 60,131.5 60,133.5 60,135.5 60,137.5 " fill="none" stroke="red" stroke-width="0.5" />
-  <circle cx="60" cy="137.5" r="0.5" fill="blue" />
-  <circle cx="63" cy="137.5" r="0.5" fill="blue" />
-  <circle cx="66" cy="137.5" r="0.5" fill="blue" />
-  <circle cx="69" cy="137.5" r="0.5" fill="blue" />
-  <circle cx="72" cy="137.5" r="0.5" fill="blue" />
-  <circle cx="75" cy="137.5" r="0.5" fill="blue" />
-  <circle cx="78" cy="137.5" r="0.5" fill="blue" />
-  <circle cx="81" cy="137.5" r="0.5" fill="blue" />
-  <circle cx="84" cy="137.5" r="0.5" fill="blue" />
-  <circle cx="87" cy="137.5" r="0.5" fill="blue" />
-  <circle cx="90" cy="137.5" r="0.5" fill="blue" />
-  <circle cx="90" cy="135.5" r="0.5" fill="blue" />
-  <circle cx="90" cy="133.5" r="0.5" fill="blue" />
-  <circle cx="90" cy="131.5" r="0.5" fill="blue" />
-  <circle cx="90" cy="129.5" r="0.5" fill="blue" />
-  <circle cx="90" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="90" cy="125.5" r="0.5" fill="blue" />
-  <circle cx="90" cy="123.5" r="0.5" fill="blue" />
-  <circle cx="90" cy="121.5" r="0.5" fill="blue" />
-  <circle cx="90" cy="119.5" r="0.5" fill="blue" />
-  <circle cx="90" cy="117.5" r="0.5" fill="blue" />
-  <circle cx="87" cy="117.5" r="0.5" fill="blue" />
-  <circle cx="84" cy="117.5" r="0.5" fill="blue" />
-  <circle cx="81" cy="117.5" r="0.5" fill="blue" />
-  <circle cx="78" cy="117.5" r="0.5" fill="blue" />
-  <circle cx="75" cy="117.5" r="0.5" fill="blue" />
-  <circle cx="72" cy="117.5" r="0.5" fill="blue" />
-  <circle cx="69" cy="117.5" r="0.5" fill="blue" />
-  <circle cx="66" cy="117.5" r="0.5" fill="blue" />
-  <circle cx="63" cy="117.5" r="0.5" fill="blue" />
-  <circle cx="60" cy="117.5" r="0.5" fill="blue" />
-  <circle cx="60" cy="119.5" r="0.5" fill="blue" />
-  <circle cx="60" cy="121.5" r="0.5" fill="blue" />
-  <circle cx="60" cy="123.5" r="0.5" fill="blue" />
-  <circle cx="60" cy="125.5" r="0.5" fill="blue" />
-  <circle cx="60" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="60" cy="129.5" r="0.5" fill="blue" />
-  <circle cx="60" cy="131.5" r="0.5" fill="blue" />
-  <circle cx="60" cy="133.5" r="0.5" fill="blue" />
-  <circle cx="60" cy="135.5" r="0.5" fill="blue" />
-  <circle cx="60" cy="137.5" r="0.5" fill="blue" />
-  <polyline points="135,127.5 134.804,125.067 134.235,122.759 133.326,120.607 132.106,118.641 130.607,116.893 128.859,115.394 126.893,114.174 124.741,113.265 122.433,112.696 120,112.5 117.567,112.696 115.259,113.265 113.107,114.174 111.141,115.394 109.393,116.893 107.894,118.641 106.674,120.607 105.765,122.759 105.196,125.067 105,127.5 105.196,129.933 105.765,132.241 106.674,134.393 107.894,136.359 109.393,138.107 111.141,139.606 113.107,140.826 115.259,141.735 117.567,142.304 120,142.5 122.433,142.304 124.741,141.735 126.893,140.826 128.859,139.606 130.607,138.107 132.106,136.359 133.326,134.393 134.235,132.241 134.804,129.933 135,127.5 135,127.5 135,127.5 135,127.5 135,127.5 135,127.5 135,127.5 135,127.5 135,127.5 135,127.5 135,127.5 " fill="none" stroke="red" stroke-width="0.5" />
-  <circle cx="135" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="134.804" cy="125.067" r="0.5" fill="blue" />
-  <circle cx="134.235" cy="122.759" r="0.5" fill="blue" />
-  <circle cx="133.326" cy="120.607" r="0.5" fill="blue" />
-  <circle cx="132.106" cy="118.641" r="0.5" fill="blue" />
-  <circle cx="130.607" cy="116.893" r="0.5" fill="blue" />
-  <circle cx="128.859" cy="115.394" r="0.5" fill="blue" />
-  <circle cx="126.893" cy="114.174" r="0.5" fill="blue" />
-  <circle cx="124.741" cy="113.265" r="0.5" fill="blue" />
-  <circle cx="122.433" cy="112.696" r="0.5" fill="blue" />
-  <circle cx="120" cy="112.5" r="0.5" fill="blue" />
-  <circle cx="117.567" cy="112.696" r="0.5" fill="blue" />
-  <circle cx="115.259" cy="113.265" r="0.5" fill="blue" />
-  <circle cx="113.107" cy="114.174" r="0.5" fill="blue" />
-  <circle cx="111.141" cy="115.394" r="0.5" fill="blue" />
-  <circle cx="109.393" cy="116.893" r="0.5" fill="blue" />
-  <circle cx="107.894" cy="118.641" r="0.5" fill="blue" />
-  <circle cx="106.674" cy="120.607" r="0.5" fill="blue" />
-  <circle cx="105.765" cy="122.759" r="0.5" fill="blue" />
-  <circle cx="105.196" cy="125.067" r="0.5" fill="blue" />
-  <circle cx="105" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="105.196" cy="129.933" r="0.5" fill="blue" />
-  <circle cx="105.765" cy="132.241" r="0.5" fill="blue" />
-  <circle cx="106.674" cy="134.393" r="0.5" fill="blue" />
-  <circle cx="107.894" cy="136.359" r="0.5" fill="blue" />
-  <circle cx="109.393" cy="138.107" r="0.5" fill="blue" />
-  <circle cx="111.141" cy="139.606" r="0.5" fill="blue" />
-  <circle cx="113.107" cy="140.826" r="0.5" fill="blue" />
-  <circle cx="115.259" cy="141.735" r="0.5" fill="blue" />
-  <circle cx="117.567" cy="142.304" r="0.5" fill="blue" />
-  <circle cx="120" cy="142.5" r="0.5" fill="blue" />
-  <circle cx="122.433" cy="142.304" r="0.5" fill="blue" />
-  <circle cx="124.741" cy="141.735" r="0.5" fill="blue" />
-  <circle cx="126.893" cy="140.826" r="0.5" fill="blue" />
-  <circle cx="128.859" cy="139.606" r="0.5" fill="blue" />
-  <circle cx="130.607" cy="138.107" r="0.5" fill="blue" />
-  <circle cx="132.106" cy="136.359" r="0.5" fill="blue" />
-  <circle cx="133.326" cy="134.393" r="0.5" fill="blue" />
-  <circle cx="134.235" cy="132.241" r="0.5" fill="blue" />
-  <circle cx="134.804" cy="129.933" r="0.5" fill="blue" />
-  <circle cx="135" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="135" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="135" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="135" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="135" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="135" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="135" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="135" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="135" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="135" cy="127.5" r="0.5" fill="blue" />
-  <circle cx="135" cy="127.5" r="0.5" fill="blue" />
-  <polyline points="60,87.5 68,87.5 76,87.5 84,87.5 92,87.5 100,87.5 108,87.5 116,87.5 124,87.5 132,87.5 140,87.5 " fill="none" stroke="red" stroke-width="0.5" />
-  <circle cx="60" cy="87.5" r="0.5" fill="blue" />
-  <circle cx="68" cy="87.5" r="0.5" fill="blue" />
-  <circle cx="76" cy="87.5" r="0.5" fill="blue" />
-  <circle cx="84" cy="87.5" r="0.5" fill="blue" />
-  <circle cx="92" cy="87.5" r="0.5" fill="blue" />
-  <circle cx="100" cy="87.5" r="0.5" fill="blue" />
-  <circle cx="108" cy="87.5" r="0.5" fill="blue" />
-  <circle cx="116" cy="87.5" r="0.5" fill="blue" />
-  <circle cx="124" cy="87.5" r="0.5" fill="blue" />
-  <circle cx="132" cy="87.5" r="0.5" fill="blue" />
-  <circle cx="140" cy="87.5" r="0.5" fill="blue" />
-  <polyline points="80,67.5 84,67.5 88,67.5 92,67.5 96,67.5 100,67.5 104,67.5 108,67.5 112,67.5 116,67.5 120,67.5 118,66.5 116,65.5 114,64.5 112,63.5 110,62.5 108,61.5 106,60.5 104,59.5 102,58.5 100,57.5 98,58.5 96,59.5 94,60.5 92,61.5 90,62.5 88,63.5 86,64.5 84,65.5 82,66.5 80,67.5 " fill="none" stroke="red" stroke-width="0.5" />
-  <circle cx="80" cy="67.5" r="0.5" fill="blue" />
-  <circle cx="84" cy="67.5" r="0.5" fill="blue" />
-  <circle cx="88" cy="67.5" r="0.5" fill="blue" />
-  <circle cx="92" cy="67.5" r="0.5" fill="blue" />
-  <circle cx="96" cy="67.5" r="0.5" fill="blue" />
-  <circle cx="100" cy="67.5" r="0.5" fill="blue" />
-  <circle cx="104" cy="67.5" r="0.5" fill="blue" />
-  <circle cx="108" cy="67.5" r="0.5" fill="blue" />
-  <circle cx="112" cy="67.5" r="0.5" fill="blue" />
-  <circle cx="116" cy="67.5" r="0.5" fill="blue" />
-  <circle cx="120" cy="67.5" r="0.5" fill="blue" />
-  <circle cx="118" cy="66.5" r="0.5" fill="blue" />
-  <circle cx="116" cy="65.5" r="0.5" fill="blue" />
-  <circle cx="114" cy="64.5" r="0.5" fill="blue" />
-  <circle cx="112" cy="63.5" r="0.5" fill="blue" />
-  <circle cx="110" cy="62.5" r="0.5" fill="blue" />
-  <circle cx="108" cy="61.5" r="0.5" fill="blue" />
-  <circle cx="106" cy="60.5" r="0.5" fill="blue" />
-  <circle cx="104" cy="59.5" r="0.5" fill="blue" />
-  <circle cx="102" cy="58.5" r="0.5" fill="blue" />
-  <circle cx="100" cy="57.5" r="0.5" fill="blue" />
-  <circle cx="98" cy="58.5" r="0.5" fill="blue" />
-  <circle cx="96" cy="59.5" r="0.5" fill="blue" />
-  <circle cx="94" cy="60.5" r="0.5" fill="blue" />
-  <circle cx="92" cy="61.5" r="0.5" fill="blue" />
-  <circle cx="90" cy="62.5" r="0.5" fill="blue" />
-  <circle cx="88" cy="63.5" r="0.5" fill="blue" />
-  <circle cx="86" cy="64.5" r="0.5" fill="blue" />
-  <circle cx="84" cy="65.5" r="0.5" fill="blue" />
-  <circle cx="82" cy="66.5" r="0.5" fill="blue" />
-  <circle cx="80" cy="67.5" r="0.5" fill="blue" />
-  <polyline points="70,107.5 76,111.82 82,113.26 88,112.54 94,110.38 100,107.5 106,104.62 112,102.46 118,101.74 124,103.18 130,107.5 " fill="none" stroke="red" stroke-width="0.5" />
-  <circle cx="70" cy="107.5" r="0.5" fill="blue" />
-  <circle cx="76" cy="111.82" r="0.5" fill="blue" />
-  <circle cx="82" cy="113.26" r="0.5" fill="blue" />
-  <circle cx="88" cy="112.54" r="0.5" fill="blue" />
-  <circle cx="94" cy="110.38" r="0.5" fill="blue" />
-  <circle cx="100" cy="107.5" r="0.5" fill="blue" />
-  <circle cx="106" cy="104.62" r="0.5" fill="blue" />
-  <circle cx="112" cy="102.46" r="0.5" fill="blue" />
-  <circle cx="118" cy="101.74" r="0.5" fill="blue" />
-  <circle cx="124" cy="103.18" r="0.5" fill="blue" />
-  <circle cx="130" cy="107.5" r="0.5" fill="blue" />
+<!-- Generated by NWSS-CNC Visualization -->
+<svg width="85.2941mm" height="90mm" viewBox="21.3529 -5 85.2941 90" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Grid -->
+  <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
+    <rect width="10" height="10" fill="#f8f8f8"/>
+    <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#e0e0e0" stroke-width="0.5" />
+  </pattern>
+  <rect x="21.3529" y="-5" width="85.2941" height="90" fill="url(#grid)" />
+  <!-- Discretized Paths -->
+  <polyline points="26.3529,75.2941 29.1765,75.2941 32,75.2941 34.8235,75.2941 37.6471,75.2941 40.4706,75.2941 43.2941,75.2941 46.1176,75.2941 48.9412,75.2941 51.7647,75.2941 54.5882,75.2941 54.5882,73.4118 54.5882,71.5294 54.5882,69.6471 54.5882,67.7647 54.5882,65.8824 54.5882,64 54.5882,62.1176 54.5882,60.2353 54.5882,58.3529 54.5882,56.4706 51.7647,56.4706 48.9412,56.4706 46.1176,56.4706 43.2941,56.4706 40.4706,56.4706 37.6471,56.4706 34.8235,56.4706 32,56.4706 29.1765,56.4706 26.3529,56.4706 26.3529,58.3529 26.3529,60.2353 26.3529,62.1176 26.3529,64 26.3529,65.8824 26.3529,67.7647 26.3529,69.6471 26.3529,71.5294 26.3529,73.4118 26.3529,75.2941 " fill="none" stroke="hsl(0, 80%, 50%)" stroke-width="1.0" />
+  <circle cx="26.3529" cy="75.2941" r="1" fill="green" />
+  <circle cx="26.3529" cy="75.2941" r="1" fill="red" />
+  <circle cx="29.1765" cy="75.2941" r="0.8" fill="blue" />
+  <circle cx="32" cy="75.2941" r="0.8" fill="blue" />
+  <circle cx="34.8235" cy="75.2941" r="0.8" fill="blue" />
+  <circle cx="37.6471" cy="75.2941" r="0.8" fill="blue" />
+  <circle cx="40.4706" cy="75.2941" r="0.8" fill="blue" />
+  <circle cx="43.2941" cy="75.2941" r="0.8" fill="blue" />
+  <circle cx="46.1176" cy="75.2941" r="0.8" fill="blue" />
+  <circle cx="48.9412" cy="75.2941" r="0.8" fill="blue" />
+  <circle cx="51.7647" cy="75.2941" r="0.8" fill="blue" />
+  <circle cx="54.5882" cy="75.2941" r="0.8" fill="blue" />
+  <circle cx="54.5882" cy="73.4118" r="0.8" fill="blue" />
+  <circle cx="54.5882" cy="71.5294" r="0.8" fill="blue" />
+  <circle cx="54.5882" cy="69.6471" r="0.8" fill="blue" />
+  <circle cx="54.5882" cy="67.7647" r="0.8" fill="blue" />
+  <circle cx="54.5882" cy="65.8824" r="0.8" fill="blue" />
+  <circle cx="54.5882" cy="64" r="0.8" fill="blue" />
+  <circle cx="54.5882" cy="62.1176" r="0.8" fill="blue" />
+  <circle cx="54.5882" cy="60.2353" r="0.8" fill="blue" />
+  <circle cx="54.5882" cy="58.3529" r="0.8" fill="blue" />
+  <circle cx="54.5882" cy="56.4706" r="0.8" fill="blue" />
+  <circle cx="51.7647" cy="56.4706" r="0.8" fill="blue" />
+  <circle cx="48.9412" cy="56.4706" r="0.8" fill="blue" />
+  <circle cx="46.1176" cy="56.4706" r="0.8" fill="blue" />
+  <circle cx="43.2941" cy="56.4706" r="0.8" fill="blue" />
+  <circle cx="40.4706" cy="56.4706" r="0.8" fill="blue" />
+  <circle cx="37.6471" cy="56.4706" r="0.8" fill="blue" />
+  <circle cx="34.8235" cy="56.4706" r="0.8" fill="blue" />
+  <circle cx="32" cy="56.4706" r="0.8" fill="blue" />
+  <circle cx="29.1765" cy="56.4706" r="0.8" fill="blue" />
+  <circle cx="26.3529" cy="56.4706" r="0.8" fill="blue" />
+  <circle cx="26.3529" cy="58.3529" r="0.8" fill="blue" />
+  <circle cx="26.3529" cy="60.2353" r="0.8" fill="blue" />
+  <circle cx="26.3529" cy="62.1176" r="0.8" fill="blue" />
+  <circle cx="26.3529" cy="64" r="0.8" fill="blue" />
+  <circle cx="26.3529" cy="65.8824" r="0.8" fill="blue" />
+  <circle cx="26.3529" cy="67.7647" r="0.8" fill="blue" />
+  <circle cx="26.3529" cy="69.6471" r="0.8" fill="blue" />
+  <circle cx="26.3529" cy="71.5294" r="0.8" fill="blue" />
+  <circle cx="26.3529" cy="73.4118" r="0.8" fill="blue" />
+  <polyline points="96.9412,65.8824 96.7564,63.5924 96.2214,61.4201 95.3654,59.3945 94.2173,57.5447 92.8062,55.8997 91.1612,54.4886 89.3114,53.3405 87.2858,52.4844 85.1135,51.9495 82.8235,51.7647 80.5336,51.9495 78.3613,52.4844 76.3357,53.3405 74.4858,54.4886 72.8408,55.8997 71.4298,57.5447 70.2817,59.3945 69.4256,61.4201 68.8907,63.5924 68.7059,65.8824 68.8907,68.1723 69.4256,70.3446 70.2817,72.3702 71.4298,74.2201 72.8408,75.865 74.4858,77.2761 76.3357,78.4242 78.3613,79.2803 80.5336,79.8152 82.8235,80 85.1135,79.8152 87.2858,79.2803 89.3114,78.4242 91.1612,77.2761 92.8062,75.865 94.2173,74.2201 95.3654,72.3702 96.2214,70.3446 96.7564,68.1723 96.9412,65.8824 96.9412,65.8824 96.9412,65.8824 96.9412,65.8824 96.9412,65.8824 96.9412,65.8824 96.9412,65.8824 96.9412,65.8824 96.9412,65.8824 96.9412,65.8824 96.9412,65.8824 " fill="none" stroke="hsl(60, 80%, 50%)" stroke-width="1.0" />
+  <circle cx="96.9412" cy="65.8824" r="1" fill="green" />
+  <circle cx="96.9412" cy="65.8824" r="1" fill="red" />
+  <circle cx="96.7564" cy="63.5924" r="0.8" fill="blue" />
+  <circle cx="96.2214" cy="61.4201" r="0.8" fill="blue" />
+  <circle cx="95.3654" cy="59.3945" r="0.8" fill="blue" />
+  <circle cx="94.2173" cy="57.5447" r="0.8" fill="blue" />
+  <circle cx="92.8062" cy="55.8997" r="0.8" fill="blue" />
+  <circle cx="91.1612" cy="54.4886" r="0.8" fill="blue" />
+  <circle cx="89.3114" cy="53.3405" r="0.8" fill="blue" />
+  <circle cx="87.2858" cy="52.4844" r="0.8" fill="blue" />
+  <circle cx="85.1135" cy="51.9495" r="0.8" fill="blue" />
+  <circle cx="82.8235" cy="51.7647" r="0.8" fill="blue" />
+  <circle cx="80.5336" cy="51.9495" r="0.8" fill="blue" />
+  <circle cx="78.3613" cy="52.4844" r="0.8" fill="blue" />
+  <circle cx="76.3357" cy="53.3405" r="0.8" fill="blue" />
+  <circle cx="74.4858" cy="54.4886" r="0.8" fill="blue" />
+  <circle cx="72.8408" cy="55.8997" r="0.8" fill="blue" />
+  <circle cx="71.4298" cy="57.5447" r="0.8" fill="blue" />
+  <circle cx="70.2817" cy="59.3945" r="0.8" fill="blue" />
+  <circle cx="69.4256" cy="61.4201" r="0.8" fill="blue" />
+  <circle cx="68.8907" cy="63.5924" r="0.8" fill="blue" />
+  <circle cx="68.7059" cy="65.8824" r="0.8" fill="blue" />
+  <circle cx="68.8907" cy="68.1723" r="0.8" fill="blue" />
+  <circle cx="69.4256" cy="70.3446" r="0.8" fill="blue" />
+  <circle cx="70.2817" cy="72.3702" r="0.8" fill="blue" />
+  <circle cx="71.4298" cy="74.2201" r="0.8" fill="blue" />
+  <circle cx="72.8408" cy="75.865" r="0.8" fill="blue" />
+  <circle cx="74.4858" cy="77.2761" r="0.8" fill="blue" />
+  <circle cx="76.3357" cy="78.4242" r="0.8" fill="blue" />
+  <circle cx="78.3613" cy="79.2803" r="0.8" fill="blue" />
+  <circle cx="80.5336" cy="79.8152" r="0.8" fill="blue" />
+  <circle cx="82.8235" cy="80" r="0.8" fill="blue" />
+  <circle cx="85.1135" cy="79.8152" r="0.8" fill="blue" />
+  <circle cx="87.2858" cy="79.2803" r="0.8" fill="blue" />
+  <circle cx="89.3114" cy="78.4242" r="0.8" fill="blue" />
+  <circle cx="91.1612" cy="77.2761" r="0.8" fill="blue" />
+  <circle cx="92.8062" cy="75.865" r="0.8" fill="blue" />
+  <circle cx="94.2173" cy="74.2201" r="0.8" fill="blue" />
+  <circle cx="95.3654" cy="72.3702" r="0.8" fill="blue" />
+  <circle cx="96.2214" cy="70.3446" r="0.8" fill="blue" />
+  <circle cx="96.7564" cy="68.1723" r="0.8" fill="blue" />
+  <circle cx="96.9412" cy="65.8824" r="0.8" fill="blue" />
+  <circle cx="96.9412" cy="65.8824" r="0.8" fill="blue" />
+  <circle cx="96.9412" cy="65.8824" r="0.8" fill="blue" />
+  <circle cx="96.9412" cy="65.8824" r="0.8" fill="blue" />
+  <circle cx="96.9412" cy="65.8824" r="0.8" fill="blue" />
+  <circle cx="96.9412" cy="65.8824" r="0.8" fill="blue" />
+  <circle cx="96.9412" cy="65.8824" r="0.8" fill="blue" />
+  <circle cx="96.9412" cy="65.8824" r="0.8" fill="blue" />
+  <circle cx="96.9412" cy="65.8824" r="0.8" fill="blue" />
+  <circle cx="96.9412" cy="65.8824" r="0.8" fill="blue" />
+  <polyline points="26.3529,28.2353 33.8824,28.2353 41.4118,28.2353 48.9412,28.2353 56.4706,28.2353 64,28.2353 71.5294,28.2353 79.0588,28.2353 86.5882,28.2353 94.1176,28.2353 101.647,28.2353 " fill="none" stroke="hsl(120, 80%, 50%)" stroke-width="1.0" />
+  <circle cx="26.3529" cy="28.2353" r="1" fill="green" />
+  <circle cx="101.647" cy="28.2353" r="1" fill="red" />
+  <circle cx="33.8824" cy="28.2353" r="0.8" fill="blue" />
+  <circle cx="41.4118" cy="28.2353" r="0.8" fill="blue" />
+  <circle cx="48.9412" cy="28.2353" r="0.8" fill="blue" />
+  <circle cx="56.4706" cy="28.2353" r="0.8" fill="blue" />
+  <circle cx="64" cy="28.2353" r="0.8" fill="blue" />
+  <circle cx="71.5294" cy="28.2353" r="0.8" fill="blue" />
+  <circle cx="79.0588" cy="28.2353" r="0.8" fill="blue" />
+  <circle cx="86.5882" cy="28.2353" r="0.8" fill="blue" />
+  <circle cx="94.1176" cy="28.2353" r="0.8" fill="blue" />
+  <polyline points="45.1765,9.41176 48.9412,9.41176 52.7059,9.41176 56.4706,9.41176 60.2353,9.41176 64,9.41176 67.7647,9.41176 71.5294,9.41176 75.2941,9.41176 79.0588,9.41176 82.8235,9.41176 80.9412,8.4706 79.0588,7.5294 77.1765,6.58824 75.2941,5.64705 73.4118,4.70588 71.5294,3.76471 69.6471,2.82353 67.7647,1.88235 65.8824,0.941176 64,0 62.1176,0.941184 60.2353,1.88235 58.3529,2.82353 56.4706,3.7647 54.5882,4.70588 52.7059,5.64707 50.8235,6.58824 48.9412,7.52941 47.0588,8.47059 45.1765,9.41176 " fill="none" stroke="hsl(180, 80%, 50%)" stroke-width="1.0" />
+  <circle cx="45.1765" cy="9.41176" r="1" fill="green" />
+  <circle cx="45.1765" cy="9.41176" r="1" fill="red" />
+  <circle cx="48.9412" cy="9.41176" r="0.8" fill="blue" />
+  <circle cx="52.7059" cy="9.41176" r="0.8" fill="blue" />
+  <circle cx="56.4706" cy="9.41176" r="0.8" fill="blue" />
+  <circle cx="60.2353" cy="9.41176" r="0.8" fill="blue" />
+  <circle cx="64" cy="9.41176" r="0.8" fill="blue" />
+  <circle cx="67.7647" cy="9.41176" r="0.8" fill="blue" />
+  <circle cx="71.5294" cy="9.41176" r="0.8" fill="blue" />
+  <circle cx="75.2941" cy="9.41176" r="0.8" fill="blue" />
+  <circle cx="79.0588" cy="9.41176" r="0.8" fill="blue" />
+  <circle cx="82.8235" cy="9.41176" r="0.8" fill="blue" />
+  <circle cx="80.9412" cy="8.4706" r="0.8" fill="blue" />
+  <circle cx="79.0588" cy="7.5294" r="0.8" fill="blue" />
+  <circle cx="77.1765" cy="6.58824" r="0.8" fill="blue" />
+  <circle cx="75.2941" cy="5.64705" r="0.8" fill="blue" />
+  <circle cx="73.4118" cy="4.70588" r="0.8" fill="blue" />
+  <circle cx="71.5294" cy="3.76471" r="0.8" fill="blue" />
+  <circle cx="69.6471" cy="2.82353" r="0.8" fill="blue" />
+  <circle cx="67.7647" cy="1.88235" r="0.8" fill="blue" />
+  <circle cx="65.8824" cy="0.941176" r="0.8" fill="blue" />
+  <circle cx="64" cy="0" r="0.8" fill="blue" />
+  <circle cx="62.1176" cy="0.941184" r="0.8" fill="blue" />
+  <circle cx="60.2353" cy="1.88235" r="0.8" fill="blue" />
+  <circle cx="58.3529" cy="2.82353" r="0.8" fill="blue" />
+  <circle cx="56.4706" cy="3.7647" r="0.8" fill="blue" />
+  <circle cx="54.5882" cy="4.70588" r="0.8" fill="blue" />
+  <circle cx="52.7059" cy="5.64707" r="0.8" fill="blue" />
+  <circle cx="50.8235" cy="6.58824" r="0.8" fill="blue" />
+  <circle cx="48.9412" cy="7.52941" r="0.8" fill="blue" />
+  <circle cx="47.0588" cy="8.47059" r="0.8" fill="blue" />
+  <polyline points="35.7647,47.0588 41.4118,51.1247 47.0588,52.48 52.7059,51.8024 58.3529,49.7694 64,47.0588 69.6471,44.3482 75.2941,42.3153 80.9412,41.6376 86.5882,42.9929 92.2353,47.0588 " fill="none" stroke="hsl(240, 80%, 50%)" stroke-width="1.0" />
+  <circle cx="35.7647" cy="47.0588" r="1" fill="green" />
+  <circle cx="92.2353" cy="47.0588" r="1" fill="red" />
+  <circle cx="41.4118" cy="51.1247" r="0.8" fill="blue" />
+  <circle cx="47.0588" cy="52.48" r="0.8" fill="blue" />
+  <circle cx="52.7059" cy="51.8024" r="0.8" fill="blue" />
+  <circle cx="58.3529" cy="49.7694" r="0.8" fill="blue" />
+  <circle cx="64" cy="47.0588" r="0.8" fill="blue" />
+  <circle cx="69.6471" cy="44.3482" r="0.8" fill="blue" />
+  <circle cx="75.2941" cy="42.3153" r="0.8" fill="blue" />
+  <circle cx="80.9412" cy="41.6376" r="0.8" fill="blue" />
+  <circle cx="86.5882" cy="42.9929" r="0.8" fill="blue" />
 </svg>

@@ -23,6 +23,8 @@ struct GCodeOptions {
     bool optimizePaths;           // Optimize path ordering to minimize travel
     bool closeLoops;              // Ensure paths that should be closed are closed
     bool separateRetract;         // Add a retract between each path
+    bool linearizePaths;     // Combine consecutive points that form straight lines
+    double linearizeTolerance; // Maximum deviation allowed for linearization
     
     // Tool options
     double toolDiameter;          // Tool diameter for offsetting (0 = no offset)
@@ -36,6 +38,8 @@ struct GCodeOptions {
         optimizePaths(false),
         closeLoops(false),
         separateRetract(true),
+        linearizePaths(true),     // Enable linearization by default
+        linearizeTolerance(0.01), // Default tolerance (adjust as needed)
         toolDiameter(0.0)
     {}
 };
@@ -98,6 +102,23 @@ private:
      * @param pathIndex The index of the path
      */
     void writePath(std::ostream& out, const Path& path, size_t pathIndex) const;
+
+    /**
+     * Linearize a path to reduce the number of points
+     * @param out The output stream
+     * @param points The points to linearize
+     * @param feedRate The feed rate for the path
+     */
+     void linearizePath(std::ostream& out, const std::vector<Point2D>& points, double feedRate) const;
+
+     /**
+      * Check if three points are collinear
+      * @param p1 First point
+      * @param p2 Second point
+      * @param p3 Third point
+      * @return True if the points are collinear, false otherwise
+      */
+     bool isCollinear(const Point2D& p1, const Point2D& p2, const Point2D& p3) const;
 };
 
 } // namespace cnc
