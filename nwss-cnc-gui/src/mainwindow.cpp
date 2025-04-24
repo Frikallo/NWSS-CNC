@@ -558,6 +558,17 @@ void MainWindow::onTabChanged(int index)
     }
 }
 
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (maybeSave()) {
+        writeSettings();
+        gcodeOptionsPanel->saveSettings();  // Save GCode options
+        event->accept();
+    } else {
+        event->ignore();
+    }
+}
+
 void MainWindow::about()
 {
     QMessageBox::about(this, tr("About NWSS-CNC"),

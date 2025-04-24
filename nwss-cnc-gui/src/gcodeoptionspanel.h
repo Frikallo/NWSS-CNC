@@ -12,6 +12,9 @@
 #include <QDoubleSpinBox>
 #include <QCheckBox>
 #include <QPushButton>
+#include <QTabWidget>
+#include <QSettings>
+#include <QFileDialog>
 
 class GCodeOptionsPanel : public QWidget
 {
@@ -21,53 +24,128 @@ public:
     explicit GCodeOptionsPanel(QWidget *parent = nullptr);
     
     // Getters for the current settings
+    // Machine settings
+    double getBedWidth() const;
+    double getBedHeight() const;
+    bool isMetricUnits() const;
+    
+    // Material settings
+    double getMaterialWidth() const;
+    double getMaterialHeight() const;
+    double getMaterialThickness() const;
+    
+    // Tool settings
     QString getToolType() const;
+    double getToolDiameter() const;
+    int getToolFluteCount() const;
+    
+    // Cutting settings
     double getFeedRate() const;
     double getPlungeRate() const;
     double getSpindleSpeed() const;
-    int getPassDepth() const;
-    int getTotalDepth() const;
+    double getCutDepth() const;
+    int getPassCount() const;
     bool getSafetyHeightEnabled() const;
     double getSafetyHeight() const;
+    
+    // Backward compatibility methods (aliasing new methods)
+    double getPassDepth() const;  // Alias for getCutDepth
+    double getTotalDepth() const; // Material thickness (total depth to cut)
+    
+    // Discretization options
+    int getBezierSamples() const;
+    double getAdaptiveSampling() const;
+    double getSimplifyTolerance() const;
+    double getMaxPointDistance() const;
+    
+    // Path transformation options
+    bool getPreserveAspectRatio() const;
+    bool getCenterX() const;
+    bool getCenterY() const;
+    bool getFlipY() const;
+    
+    // G-Code generation options
+    bool getOptimizePaths() const;
+    bool getLinearizePaths() const;
+    
+    // Settings management
+    void saveSettings();
+    void loadSettings();
+    
+    // Profile management
+    void saveProfileAs();
+    void loadProfile();
     
 signals:
     void optionsChanged();
     void generateGCode();
+    void settingsLoaded();
 
 private slots:
     void onToolTypeChanged(const QString &toolType);
     void updateUnitDisplay(bool isMetric);
+    void onMaterialChanged();
 
 private:
+    // Tab widget for organizing settings
+    QTabWidget *tabWidget;
+    
+    // Machine settings
+    QDoubleSpinBox *bedWidthSpinBox;
+    QDoubleSpinBox *bedHeightSpinBox;
+    QCheckBox *metricUnitsCheckBox;
+    
+    // Material settings
+    QDoubleSpinBox *materialWidthSpinBox;
+    QDoubleSpinBox *materialHeightSpinBox;
+    QDoubleSpinBox *materialThicknessSpinBox;
+    
     // Tool settings
     QComboBox *toolTypeComboBox;
     QDoubleSpinBox *toolDiameterSpinBox;
     QSpinBox *toolFluteCountSpinBox;
     
-    // Cut settings
+    // Cutting settings
     QDoubleSpinBox *feedRateSpinBox;
     QDoubleSpinBox *plungeRateSpinBox;
     QDoubleSpinBox *spindleSpeedSpinBox;
-    QDoubleSpinBox *passDepthSpinBox;
-    QDoubleSpinBox *totalDepthSpinBox;
-    
-    // Safety settings
+    QDoubleSpinBox *cutDepthSpinBox;
+    QSpinBox *passCountSpinBox;
     QCheckBox *safetyHeightCheckBox;
     QDoubleSpinBox *safetyHeightSpinBox;
     
-    // Unit settings
-    QCheckBox *metricUnitsCheckBox;
+    // Discretization options
+    QSpinBox *bezierSamplesSpinBox;
+    QDoubleSpinBox *adaptiveSpinBox;
+    QDoubleSpinBox *simplifySpinBox;
+    QDoubleSpinBox *maxPointDistanceSpinBox;
     
-    // Generator settings
-    QComboBox *optimizationComboBox;
+    // Path transformation options
+    QCheckBox *preserveAspectRatioCheckBox;
+    QCheckBox *centerXCheckBox;
+    QCheckBox *centerYCheckBox;
+    QCheckBox *flipYCheckBox;
+    
+    // G-Code generation options
+    QCheckBox *optimizePathsCheckBox;
+    QCheckBox *linearizePathsCheckBox;
+    
+    // Profile buttons
+    QPushButton *saveProfileButton;
+    QPushButton *loadProfileButton;
     
     // Generate button
     QPushButton *generateButton;
     
-    void setupToolGroup();
-    void setupCutSettingsGroup();
-    void setupSafetyGroup();
-    void setupOptimizationGroup();
+    // Setup methods for different sections
+    void setupMachineTab();
+    void setupToolTab();
+    void setupCuttingTab();
+    void setupTransformTab();
+    void setupAdvancedTab();
+    void setupProfileButtons();
+    
+    void recalculatePassCount();
     
     bool isMetric;
 };

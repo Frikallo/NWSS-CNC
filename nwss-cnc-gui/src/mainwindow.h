@@ -53,6 +53,7 @@ private:
     void setCurrentFile(const QString &fileName);
     QString strippedName(const QString &fullFileName);
     void setupTabWidget();
+    void closeEvent(QCloseEvent *event);
 
     QString currentFile;
     bool isUntitled;
