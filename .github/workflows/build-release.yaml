@@ -1,0 +1,116 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.5.0'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2019_64'
+          modules: 'qtsvg qtserialport'
+      
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+      
+      - name: Create build directory
+        run: mkdir build
+      
+      - name: Configure CMake
+        working-directory: ./build
+        run: cmake .. -DCMAKE_BUILD_TYPE=Release
+      
+      - name: Build application
+        working-directory: ./build
+        run: cmake --build . --config Release
+      
+      - name: Package application
+        working-directory: ./build
+        run: cmake --build . --target package_for_github
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-package
+          path: |
+            build/*.zip
+            build/*.exe
+  
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.5.0'
+          host: 'mac'
+          target: 'desktop'
+          arch: 'clang_64'
+          modules: 'qtsvg qtserialport'
+      
+      - name: Create build directory
+        run: mkdir build
+      
+      - name: Configure CMake
+        working-directory: ./build
+        run: cmake .. -DCMAKE_BUILD_TYPE=Release
+      
+      - name: Build application
+        working-directory: ./build
+        run: cmake --build . --config Release
+      
+      - name: Package application
+        working-directory: ./build
+        run: cmake --build . --target package_for_github
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-package
+          path: build/*.dmg
+  
+  create-release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: windows-package
+          path: windows-package
+      
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: macos-package
+          path: macos-package
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            windows-package/*
+            macos-package/*
+          draft: false
+          prerelease: false
+          name: NWSS CNC ${{ github.ref_name }}
+          body: |
+            NWSS CNC ${{ github.ref_name }} Release
+            
+            ## Downloads
+            - Windows: NWSS CNC Installer (.exe) or ZIP archive
+            - macOS: NWSS CNC disk image (.dmg)
