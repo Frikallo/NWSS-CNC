@@ -283,7 +283,7 @@ void MainWindow::createDockPanels()
     // G-Code options panel dock
     gcodeOptionsDock = new QDockWidget(tr("G-Code Options"), this);
     gcodeOptionsDock->setWidget(gcodeOptionsPanel);
-    gcodeOptionsDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+    gcodeOptionsDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
     addDockWidget(Qt::LeftDockWidgetArea, gcodeOptionsDock);
     
     // Connect the show/hide action
@@ -427,11 +427,18 @@ void MainWindow::loadFile(const QString &fileName)
     }
 
     QTextStream in(&file);
-    gCodeEditor->setPlainText(in.readAll());
+    QString content = in.readAll();
+    
+    // Set the content in the editor
+    gCodeEditor->setPlainText(content);
+
+    // Wait a moment before updating the preview to ensure the editor has completed its setup
+    QTimer::singleShot(100, this, [this]() {
+        updateGCodePreview();
+    });
 
     setCurrentFile(fileName);
     statusBar()->showMessage(tr("File loaded"), 2000);
-    updateGCodePreview();
 }
 
 bool MainWindow::saveFile(const QString &fileName)
@@ -476,9 +483,15 @@ void MainWindow::documentWasModified()
 
 void MainWindow::updateGCodePreview()
 {
-    // Parse GCode and update the 3D viewer
+    // Ensure the viewer is properly updated with the current G-code
     QString gcode = gCodeEditor->toPlainText();
-    gCodeViewer->processGCode(gcode);
+    
+    // Use a single-shot timer to ensure the OpenGL context is ready
+    QTimer::singleShot(50, this, [this, gcode]() {
+        if (gCodeViewer && isVisible()) {
+            gCodeViewer->processGCode(gcode);
+        }
+    });
 }
 
 void MainWindow::convertSvgToGCode(const QString &svgFile)

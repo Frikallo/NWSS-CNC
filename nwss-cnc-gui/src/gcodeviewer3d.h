@@ -47,6 +47,7 @@ private:
     void drawGrid();
     void drawToolPath();
     void parseGCode(const QString &gcode);
+    void makePathVertices();
     void updatePathVertices();
     void autoScaleToFit();
     void setIsometricView();

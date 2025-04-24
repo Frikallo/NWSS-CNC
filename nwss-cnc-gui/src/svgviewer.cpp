@@ -7,14 +7,16 @@
 #include <QScrollBar>
 #include <QFileInfo>
 #include <QGraphicsDropShadowEffect>
+#include <QTimer>
 
 // SVGView Implementation
 SVGView::SVGView(QWidget *parent)
     : QGraphicsView(parent),
-      m_svgItem(nullptr),
       m_renderer(nullptr),
       m_zoomFactor(1.0),
-      m_isPanning(false)
+      m_isPanning(false),
+      m_useRasterization(true),
+      m_rasterizedZoomFactor(0.0)
 {
     // Set up the scene
     m_scene = new QGraphicsScene(this);
@@ -26,20 +28,29 @@ SVGView::SVGView(QWidget *parent)
     setDragMode(QGraphicsView::ScrollHandDrag);
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     setResizeAnchor(QGraphicsView::AnchorUnderMouse);
-    setInteractive(true);
+    setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
     
     // Visual style
     setFrameShape(QFrame::NoFrame);
     setBackgroundBrush(QBrush(QColor(240, 240, 240)));
     
-    // Default scale
-    resetZoom();
+    // Override the scene drawing for our custom rendering
+    setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+}
+
+SVGView::~SVGView()
+{
+    if (m_renderer) {
+        delete m_renderer;
+    }
 }
 
 void SVGView::setSvgFile(const QString &filePath)
 {
-    // Clear existing items
+    // Clear existing scene
     m_scene->clear();
+    
+    // Delete old renderer if it exists
     if (m_renderer) {
         delete m_renderer;
         m_renderer = nullptr;
@@ -52,80 +63,102 @@ void SVGView::setSvgFile(const QString &filePath)
     if (!m_renderer->isValid()) {
         delete m_renderer;
         m_renderer = nullptr;
-        m_svgItem = nullptr;
         QMessageBox::warning(this, tr("SVG Load Error"), 
-                            tr("Failed to load SVG file: %1").arg(filePath));
+                             tr("Failed to load SVG file: %1").arg(filePath));
         return;
     }
     
-    // Create the SVG item
-    m_svgItem = new QGraphicsSvgItem();
-    m_svgItem->setSharedRenderer(m_renderer);
-    m_scene->addItem(m_svgItem);
+    // Get SVG bounds and set scene rect
+    m_svgBounds = QRectF(QPointF(0, 0), m_renderer->defaultSize());
+    m_scene->setSceneRect(m_svgBounds);
     
-    // Set the scene rect to the SVG bounds
-    QRectF bounds = m_svgItem->boundingRect();
-    m_scene->setSceneRect(bounds);
+    // Set a reasonable base size for rasterization
+    m_baseSize = m_renderer->defaultSize();
+    if (m_baseSize.width() > 1000 || m_baseSize.height() > 1000) {
+        // Scale down very large SVGs
+        double factor = 1000.0 / qMax(m_baseSize.width(), m_baseSize.height());
+        m_baseSize = QSize(m_baseSize.width() * factor, m_baseSize.height() * factor);
+    }
     
-    // Add a subtle drop shadow
-    QGraphicsDropShadowEffect *shadowEffect = new QGraphicsDropShadowEffect();
-    shadowEffect->setBlurRadius(20.0);
-    shadowEffect->setColor(QColor(0, 0, 0, 50));
-    shadowEffect->setOffset(5.0, 5.0);
-    m_svgItem->setGraphicsEffect(shadowEffect);
-    
-    // Reset zoom to show the entire SVG
+    // Reset zoom and create initial rasterized image
     resetZoom();
 }
 
-void SVGView::zoomIn()
+void SVGView::updateRasterizedImage()
 {
-    m_zoomFactor *= 1.2;
-    setZoom(m_zoomFactor * 100);
-}
-
-void SVGView::zoomOut()
-{
-    m_zoomFactor /= 1.2;
-    setZoom(m_zoomFactor * 100);
-}
-
-void SVGView::resetZoom()
-{
-    // Reset the transformation
-    m_zoomFactor = 1.0;
-    resetTransform();
+    if (!m_renderer) return;
     
-    // Automatically fit the SVG in view if it exists
-    if (m_svgItem) {
-        QRectF bounds = m_svgItem->boundingRect();
-        fitInView(bounds, Qt::KeepAspectRatio);
-        
-        // Calculate the actual zoom factor after fitting
-        QTransform currentTransform = transform();
-        m_zoomFactor = currentTransform.m11();
+    // Calculate image size based on zoom level
+    QSize imageSize = m_baseSize * m_zoomFactor;
+    
+    // Create a new pixmap and render the SVG into it
+    m_rasterizedImage = QPixmap(imageSize);
+    m_rasterizedImage.fill(Qt::transparent);
+    
+    QPainter painter(&m_rasterizedImage);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    
+    m_renderer->render(&painter);
+    painter.end();
+    
+    // Store the zoom level we rendered at
+    m_rasterizedZoomFactor = m_zoomFactor;
+    
+    // Update the viewport
+    viewport()->update();
+}
+
+void SVGView::paintEvent(QPaintEvent *event)
+{
+    if (!m_renderer) {
+        // Fall back to default rendering if no SVG is loaded
+        QGraphicsView::paintEvent(event);
+        return;
     }
+    
+    QPainter painter(viewport());
+    
+    // Clear background
+    painter.fillRect(rect(), backgroundBrush());
+    
+    // Set the world transformation based on current view
+    painter.setWorldTransform(viewportTransform());
+    
+    if (m_useRasterization && m_zoomFactor >= RASTERIZATION_THRESHOLD) {
+        // For high zoom levels, use the rasterized approach
+        drawRasterizedImage(&painter);
+    } else {
+        // For lower zoom levels, render the SVG directly
+        drawSvgDirectly(&painter);
+    }
+    
+    painter.end();
 }
 
-void SVGView::setZoom(int zoomLevel)
+void SVGView::drawSvgDirectly(QPainter *painter)
 {
-    if (!m_svgItem) return;
+    // Direct SVG rendering
+    m_renderer->render(painter, m_svgBounds);
+}
+
+void SVGView::drawRasterizedImage(QPainter *painter)
+{
+    // Check if we need to update the rasterized image
+    if (m_rasterizedImage.isNull() || 
+        qAbs(m_rasterizedZoomFactor - m_zoomFactor) > 0.1) {
+        // Create or update the rasterized image
+        updateRasterizedImage();
+    }
     
-    // Calculate the new zoom factor (zoomLevel is a percentage)
-    double newZoomFactor = zoomLevel / 100.0;
-    
-    // Reset the transformation
-    resetTransform();
-    
-    // Apply the new zoom
-    scale(newZoomFactor, newZoomFactor);
-    m_zoomFactor = newZoomFactor;
+    // Draw the rasterized image
+    painter->drawPixmap(m_svgBounds, m_rasterizedImage, QRectF(m_rasterizedImage.rect()));
 }
 
 void SVGView::wheelEvent(QWheelEvent *event)
 {
     // Only zoom if an SVG is loaded
-    if (!m_svgItem) {
+    if (!m_renderer) {
         QGraphicsView::wheelEvent(event);
         return;
     }
@@ -134,17 +167,126 @@ void SVGView::wheelEvent(QWheelEvent *event)
     double delta = event->angleDelta().y() / 120.0;
     double factor = std::pow(1.2, delta);
     
+    // Apply zoom limits
+    double newZoomFactor = m_zoomFactor * factor;
+    if (newZoomFactor > 50.0) {
+        factor = 50.0 / m_zoomFactor;
+        newZoomFactor = 50.0;
+    } else if (newZoomFactor < 0.05) {
+        factor = 0.05 / m_zoomFactor;
+        newZoomFactor = 0.05;
+    }
+    
+    // Store old zoom center
+    QPointF oldPos = mapToScene(event->position().toPoint());
+    
     // Apply the zoom
-    m_zoomFactor *= factor;
+    m_zoomFactor = newZoomFactor;
     scale(factor, factor);
     
-    // Update the UI (signal could be added here if needed)
+    // Center on cursor position
+    QPointF newPos = mapToScene(event->position().toPoint());
+    QPointF delta2 = newPos - oldPos;
+    translate(delta2.x(), delta2.y());
+    
+    // Emit signal about zoom change
+    emit zoomChanged(m_zoomFactor * 100);
+    
+    // If zoom crossed the rasterization threshold, update
+    bool wasAboveThreshold = m_rasterizedZoomFactor >= RASTERIZATION_THRESHOLD;
+    bool isAboveThreshold = m_zoomFactor >= RASTERIZATION_THRESHOLD;
+    
+    if (wasAboveThreshold != isAboveThreshold) {
+        // Just crossed the threshold, force update
+        updateRasterizedImage();
+    }
+    
     event->accept();
 }
 
+void SVGView::setZoom(int zoomLevel)
+{
+    if (!m_renderer) return;
+    
+    // Calculate the new zoom factor (zoomLevel is a percentage)
+    double newZoomFactor = zoomLevel / 100.0;
+    
+    // Apply zoom limits
+    if (newZoomFactor > 50.0) newZoomFactor = 50.0;
+    if (newZoomFactor < 0.05) newZoomFactor = 0.05;
+    
+    // Store center point to maintain focus
+    QPointF centerPoint = mapToScene(viewport()->rect().center());
+    
+    // Reset the transformation
+    resetTransform();
+    
+    // Apply the new zoom
+    scale(newZoomFactor, newZoomFactor);
+    m_zoomFactor = newZoomFactor;
+    
+    // Center on previous center point
+    centerOn(centerPoint);
+    
+    // Check if we crossed the rasterization threshold
+    bool needsRasterUpdate = m_useRasterization && 
+                            (m_zoomFactor >= RASTERIZATION_THRESHOLD) && 
+                            (qAbs(m_rasterizedZoomFactor - m_zoomFactor) > 0.1);
+    
+    if (needsRasterUpdate) {
+        updateRasterizedImage();
+    }
+    
+    // Emit signal about zoom change
+    emit zoomChanged(zoomLevel);
+    
+    // Update the view
+    viewport()->update();
+}
+
+void SVGView::resetZoom()
+{
+    if (!m_renderer) return;
+    
+    // Reset the transformation
+    resetTransform();
+    
+    // Fit the view to the SVG
+    fitInView(m_svgBounds, Qt::KeepAspectRatio);
+    
+    // Calculate the actual zoom factor
+    QTransform t = transform();
+    m_zoomFactor = t.m11();  // m11 is the X scale factor in the transform matrix
+    
+    // Create initial rasterized image
+    updateRasterizedImage();
+    
+    // Emit signal about zoom change
+    emit zoomChanged(m_zoomFactor * 100);
+}
+
+void SVGView::resizeEvent(QResizeEvent *event)
+{
+    QGraphicsView::resizeEvent(event);
+    
+    // Update view when widget is resized
+    if (m_renderer && m_scene) {
+        // Preserve zoom level during resize
+        QTransform t;
+        t.scale(m_zoomFactor, m_zoomFactor);
+        setTransform(t);
+        
+        // Update rasterized image if needed
+        if (m_useRasterization && m_zoomFactor >= RASTERIZATION_THRESHOLD) {
+            updateRasterizedImage();
+        }
+    }
+}
+
+
 void SVGView::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::MiddleButton) {
+    if (event->button() == Qt::MiddleButton || event->button() == Qt::LeftButton) {
         m_lastMousePos = event->pos();
         m_isPanning = true;
         setCursor(Qt::ClosedHandCursor);
@@ -169,7 +311,7 @@ void SVGView::mouseMoveEvent(QMouseEvent *event)
 
 void SVGView::mouseReleaseEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::MiddleButton) {
+    if (event->button() == Qt::MiddleButton || event->button() == Qt::LeftButton) {
         m_isPanning = false;
         setCursor(Qt::ArrowCursor);
         event->accept();
@@ -194,11 +336,25 @@ SVGViewer::SVGViewer(QWidget *parent)
     m_svgView = new SVGView(this);
     mainLayout->addWidget(m_svgView);
     
+    // Connect the zoom changed signal from SVGView
+    connect(m_svgView, &SVGView::zoomChanged, this, &SVGViewer::onSvgViewZoomChanged);
+    
     // Set up the status bar
     setupStatusBar();
     
     // Disable the convert button initially
     m_convertButton->setEnabled(false);
+}
+
+void SVGViewer::onSvgViewZoomChanged(double zoomFactor)
+{
+    // Update slider without triggering signals
+    m_zoomSlider->blockSignals(true);
+    m_zoomSlider->setValue(qRound(zoomFactor));
+    m_zoomSlider->blockSignals(false);
+    
+    // Update zoom label
+    updateZoomLabel(qRound(zoomFactor));
 }
 
 void SVGViewer::setupToolbar()
@@ -230,18 +386,6 @@ void SVGViewer::setupToolbar()
     toolbar->addWidget(m_fitButton);
     
     toolbar->addSeparator();
-    
-    // Conversion controls
-    toolbar->addWidget(new QLabel(tr("Conversion Mode:")));
-    
-    m_conversionModeComboBox = new QComboBox();
-    m_conversionModeComboBox->addItems({
-        tr("Outline (2D)"),
-        tr("Pocket (2D)"),
-        tr("Engrave (2D)"),
-        tr("V-Carve (3D)")
-    });
-    toolbar->addWidget(m_conversionModeComboBox);
     
     m_convertButton = new QPushButton(tr("Convert to GCode"));
     m_convertButton->setStyleSheet("background-color: #4CAF50; color: white;");

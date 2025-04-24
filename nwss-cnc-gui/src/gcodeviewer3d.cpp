@@ -23,7 +23,7 @@ GCodeViewer3D::GCodeViewer3D(QWidget *parent)
     updateTimer->setSingleShot(true);
     connect(updateTimer, &QTimer::timeout, [this]() {
         if (pathNeedsUpdate) {
-            updatePathVertices();
+            makePathVertices();
             if (autoScaleEnabled && hasValidToolPath) {
                 autoScaleToFit();
             }
@@ -84,7 +84,7 @@ void GCodeViewer3D::initializeGL()
     // Fixed scale for empty view
     scale = 1.0f;
     
-    updatePathVertices();
+    makePathVertices();
 }
 
 void GCodeViewer3D::setIsometricView()
@@ -333,12 +333,27 @@ void GCodeViewer3D::drawGrid()
 
 void GCodeViewer3D::updatePathVertices()
 {
-    if (toolPath.empty()) {
+    // Just mark that the vertices need to be updated
+    // The actual update will happen in makePathVertices
+    pathNeedsUpdate = true;
+    if (!updateTimer->isActive()) {
+        updateTimer->start(100);
+    }
+}
+
+void GCodeViewer3D::makePathVertices()
+{
+    // Don't try to update if not initialized
+    if (!isValid() || !pathVbo.isCreated()) {
         return;
     }
-    
-    // Clear previous data
+
     pathVertices.clear();
+    
+    // Check if we have tool path points
+    if (toolPath.empty() || !hasValidToolPath) {
+        return;
+    }
     
     // For each point in the tool path
     for (size_t i = 0; i < toolPath.size(); i++) {
@@ -363,25 +378,27 @@ void GCodeViewer3D::updatePathVertices()
         }
     }
     
-    // Update GPU buffer
-    makeCurrent();
-    pathVao.bind();
-    pathVbo.bind();
-    
-    // Make sure buffer is large enough
-    pathVbo.allocate(pathVertices.data(), pathVertices.size() * sizeof(float));
-    
-    // Clear previous vertex attribute setup to avoid conflicts
-    pathProgram.bind();
-    pathProgram.enableAttributeArray(0);
-    pathProgram.setAttributeBuffer(0, GL_FLOAT, 0, 3, 6 * sizeof(float));
-    
-    pathProgram.enableAttributeArray(1);
-    pathProgram.setAttributeBuffer(1, GL_FLOAT, 3 * sizeof(float), 3, 6 * sizeof(float));
-    pathProgram.release();
-    
-    pathVao.release();
-    doneCurrent();
+    // Only update GPU buffer if the context is valid
+    if (isValid()) {
+        makeCurrent();
+        pathVao.bind();
+        pathVbo.bind();
+        
+        // Make sure buffer is large enough
+        pathVbo.allocate(pathVertices.data(), pathVertices.size() * sizeof(float));
+        
+        // Update vertex attributes
+        pathProgram.bind();
+        pathProgram.enableAttributeArray(0);
+        pathProgram.setAttributeBuffer(0, GL_FLOAT, 0, 3, 6 * sizeof(float));
+        
+        pathProgram.enableAttributeArray(1);
+        pathProgram.setAttributeBuffer(1, GL_FLOAT, 3 * sizeof(float), 3, 6 * sizeof(float));
+        pathProgram.release();
+        
+        pathVao.release();
+        doneCurrent();
+    }
 }
 
 void GCodeViewer3D::drawToolPath()
@@ -486,24 +503,35 @@ void GCodeViewer3D::wheelEvent(QWheelEvent *event)
 
 void GCodeViewer3D::processGCode(const QString &gcode)
 {
+    // Clear existing tool path first
+    toolPath.clear();
+    hasValidToolPath = false;
+    
     // Check if the GCode is empty
     if (gcode.trimmed().isEmpty()) {
         // If empty, just show the grid with no tool path
-        toolPath.clear();
-        hasValidToolPath = false;
-        
-        // Reset to default view
         setIsometricView();
         scale = 0.5f;
-        
-        update();
+        pathNeedsUpdate = true;
+        updateTimer->start(100);
         return;
     }
     
-    // Process normal GCode
-    parseGCode(gcode);
-    pathNeedsUpdate = true;
-    updateTimer->start(100); // Wait a bit before updating to avoid multiple updates when editing
+    // Process normal GCode safely
+    try {
+        parseGCode(gcode);
+        pathNeedsUpdate = true;
+        updateTimer->start(100); // Wait a bit before updating to avoid multiple updates when editing
+    } catch (const std::exception& e) {
+        qDebug() << "Exception during GCode parsing:" << e.what();
+        // Reset to a safe state
+        toolPath.clear();
+        hasValidToolPath = false;
+        setIsometricView();
+        scale = 0.5f;
+        pathNeedsUpdate = true;
+        updateTimer->start(100);
+    }
 }
 
 void GCodeViewer3D::autoScaleToFit()
