@@ -75,10 +75,12 @@ public:
     // Profile management
     void saveProfileAs();
     void loadProfile();
+
+    void setCurrentSvgFile(const QString& filename);
     
 signals:
     void optionsChanged();
-    void generateGCode();
+    void generateGCode(const QString &svgFile);
     void settingsLoaded();
 
 private slots:
@@ -148,6 +150,7 @@ private:
     void recalculatePassCount();
     
     bool isMetric;
+    QString m_currentSvgFile;
 };
 
 #endif // GCODEOPTIONSPANEL_H

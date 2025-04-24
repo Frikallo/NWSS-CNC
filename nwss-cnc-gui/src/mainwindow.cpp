@@ -114,6 +114,10 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::convertSvgToGCode);
     connect(svgViewer, &SVGViewer::convertToGCode,
             this, &MainWindow::convertSvgToGCode);
+    connect(svgViewer, &SVGViewer::svgLoaded, 
+        [this](const QString& filePath) {
+            gcodeOptionsPanel->setCurrentSvgFile(filePath);
+        });
 
     // Initial state
     setCurrentFile("");
@@ -554,8 +558,8 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
     // Update the GCode editor with the generated code
     gCodeEditor->setPlainText(gcode);
     
-    // Switch to the GCode editor tab
-    tabWidget->setCurrentIndex(0);
+    // Switch to the 3d preview tab
+    tabWidget->setCurrentIndex(1);
     
     // Mark as untitled so user can save it
     setCurrentFile("");

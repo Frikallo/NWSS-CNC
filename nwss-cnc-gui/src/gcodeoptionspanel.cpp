@@ -33,7 +33,9 @@ GCodeOptionsPanel::GCodeOptionsPanel(QWidget *parent)
     mainLayout->addStretch();
     
     // Connect signals
-    connect(generateButton, &QPushButton::clicked, this, &GCodeOptionsPanel::generateGCode);
+    connect(generateButton, &QPushButton::clicked, this, [this]() {
+        emit generateGCode(m_currentSvgFile);
+    });
     connect(toolTypeComboBox, &QComboBox::currentTextChanged, this, &GCodeOptionsPanel::onToolTypeChanged);
     connect(metricUnitsCheckBox, &QCheckBox::toggled, this, &GCodeOptionsPanel::updateUnitDisplay);
     connect(materialThicknessSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &GCodeOptionsPanel::onMaterialChanged);
@@ -45,6 +47,10 @@ GCodeOptionsPanel::GCodeOptionsPanel(QWidget *parent)
     
     // Load settings from the last session
     QTimer::singleShot(100, this, &GCodeOptionsPanel::loadSettings);
+}
+
+void GCodeOptionsPanel::setCurrentSvgFile(const QString& filename) {
+    m_currentSvgFile = filename;
 }
 
 void GCodeOptionsPanel::setupMachineTab()
