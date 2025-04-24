@@ -367,14 +367,14 @@ void GCodeViewer3D::makePathVertices()
         // Add color data
         if (point.isRapid) {
             // Blue for rapid moves
-            pathVertices.push_back(0.0f);
-            pathVertices.push_back(0.5f);
             pathVertices.push_back(1.0f);
+            pathVertices.push_back(0.5f);
+            pathVertices.push_back(0.0f);
         } else {
             // Green for cutting moves
             pathVertices.push_back(0.0f);
-            pathVertices.push_back(0.8f);
-            pathVertices.push_back(0.2f);
+            pathVertices.push_back(0.3f);
+            pathVertices.push_back(1.0f);
         }
     }
     

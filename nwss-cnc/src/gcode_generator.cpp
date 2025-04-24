@@ -216,7 +216,7 @@ void GCodeGenerator::writePath(std::ostream& out, const Path& path, size_t pathI
         }
         
         // Retract to safe height if not the last pass
-        if (pass < passCount - 1) {
+        if (pass < passCount - 1 || passCount == 1) {
             out << "G00 Z" << safeHeight << "  ; Retract to safe height" << std::endl;
         }
     }
