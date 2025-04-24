@@ -24,6 +24,9 @@ int main(int argc, char *argv[])
     
     // Use a modern style
     app.setStyle(QStyleFactory::create("Fusion"));
+
+    QFont defaultFont("Helvetica", 12);
+    app.setFont(defaultFont);
     
     // Create a more modern palette
     QPalette palette;

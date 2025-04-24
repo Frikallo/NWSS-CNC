@@ -270,7 +270,11 @@ void MainWindow::createToolBars()
     viewToolBar = addToolBar(tr("View"));
     
     // Add a tab selector to the view toolbar
+    QFont f = viewToolBar->font();
+    f.setPointSize(12);
     QLabel *tabLabel = new QLabel(tr("View: "));
+    tabLabel->setMargin(int(5));
+    tabLabel->setFont(f);
     viewToolBar->addWidget(tabLabel);
     
     QComboBox *tabComboBox = new QComboBox();
@@ -287,8 +291,8 @@ void MainWindow::createToolBars()
 
 void MainWindow::createDockPanels()
 {   
-    // G-Code options panel dock
-    gcodeOptionsDock = new QDockWidget(tr("G-Code Options"), this);
+    // Options panel dock
+    gcodeOptionsDock = new QDockWidget(tr("Options"), this);
     gcodeOptionsDock->setWidget(gcodeOptionsPanel);
     gcodeOptionsDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
     addDockWidget(Qt::LeftDockWidgetArea, gcodeOptionsDock);

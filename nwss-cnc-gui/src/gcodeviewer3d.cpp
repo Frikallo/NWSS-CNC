@@ -13,7 +13,7 @@ GCodeViewer3D::GCodeViewer3D(QWidget *parent)
       minBounds(-50.0f, -50.0f, -50.0f),
       maxBounds(50.0f, 50.0f, 50.0f),
       pathNeedsUpdate(false),
-      autoScaleEnabled(true),
+      autoScaleEnabled(false),
       hasValidToolPath(false)
 {
     setFocusPolicy(Qt::StrongFocus);
@@ -221,7 +221,7 @@ void GCodeViewer3D::paintGL()
     
     // Maintain isometric view while applying scale
     QVector3D viewDirection = (cameraPosition - cameraTarget).normalized();
-    float viewDistance = 500.0f / scale; // Scale affects how far away we are
+    float viewDistance = 300.0f / scale; // Scale affects how far away we are
     
     QVector3D scaledPosition = cameraTarget + viewDirection * viewDistance;
     
