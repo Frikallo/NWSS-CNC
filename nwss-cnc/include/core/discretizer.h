@@ -1,7 +1,7 @@
 #ifndef NWSS_CNC_DISCRETIZER_HPP
 #define NWSS_CNC_DISCRETIZER_HPP
 
-#include "nwss-cnc/geometry.h"
+#include "core/geometry.h"
 
 struct NSVGimage;
 struct NSVGshape;

@@ -1,4 +1,4 @@
-#include "nwss-cnc/gcode_generator.h"
+#include "core/gcode_generator.h"
 #include <fstream>
 #include <sstream>
 #include <iomanip>

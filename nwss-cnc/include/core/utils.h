@@ -3,8 +3,8 @@
 
 #include <string>
 #include <vector>
-#include "nwss-cnc/geometry.h"
-#include "nwss-cnc/config.h"
+#include "core/geometry.h"
+#include "core/config.h"
 
 namespace nwss {
 namespace cnc {

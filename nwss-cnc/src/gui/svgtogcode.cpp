@@ -5,11 +5,11 @@
 #include <QFileInfo>
 
 // Include necessary library headers
-#include "nwss-cnc/svg_parser.h"
-#include "nwss-cnc/discretizer.h"
-#include "nwss-cnc/config.h"
-#include "nwss-cnc/transform.h"
-#include "nwss-cnc/gcode_generator.h"
+#include "core/svg_parser.h"
+#include "core/discretizer.h"
+#include "core/config.h"
+#include "core/transform.h"
+#include "core/gcode_generator.h"
 
 SvgToGCode::SvgToGCode(QObject *parent)
     : QObject(parent)

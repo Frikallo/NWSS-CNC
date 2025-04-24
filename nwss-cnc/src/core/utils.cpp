@@ -1,6 +1,6 @@
-#include "nwss-cnc/utils.h"
-#include "nwss-cnc/svg_parser.h"
-#include "nwss-cnc/config.h"
+#include "core/utils.h"
+#include "core/svg_parser.h"
+#include "core/config.h"
 
 #include <fstream>
 #include <iomanip>

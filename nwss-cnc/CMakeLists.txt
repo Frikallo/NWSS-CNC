@@ -1,97 +1,101 @@
-cmake_minimum_required(VERSION 3.14)
-project(nwss-cnc VERSION 0.1.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.16)
+project(nwss-cnc VERSION 1.0.0 LANGUAGES CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Option to build tests
-option(NWSS_CNC_BUILD_TESTS "Build test programs" OFF)
+# Qt specific configuration
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
 
 # Add math definitions for M_PI on Windows
 if(MSVC)
     add_definitions(-D_USE_MATH_DEFINES)
 endif()
 
-# Include directories
+# Find required packages
+find_package(Qt6 COMPONENTS Core Gui Widgets OpenGLWidgets Svg SvgWidgets SerialPort REQUIRED)
+
+# Set include directories
 include_directories(
-    ${PROJECT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
-# Library sources
-set(NWSS_CNC_SOURCES
-    src/svg_parser.cpp
-    src/discretizer.cpp
-    src/geometry.cpp
-    src/utils.cpp
-    src/nanosvg_impl.cpp
-    src/config.cpp
-    src/transform.cpp
-    src/gcode_generator.cpp
+# Define source files for the core library
+set(CORE_SOURCES
+    src/core/svg_parser.cpp
+    src/core/discretizer.cpp
+    src/core/geometry.cpp
+    src/core/utils.cpp
+    src/core/nanosvg_impl.cpp
+    src/core/config.cpp
+    src/core/transform.cpp
+    src/core/gcode_generator.cpp
 )
 
-# Create static library
-add_library(nwss-cnc STATIC ${NWSS_CNC_SOURCES})
-target_include_directories(nwss-cnc PUBLIC 
+# Create the core static library
+add_library(nwss-cnc-core STATIC ${CORE_SOURCES})
+target_include_directories(nwss-cnc-core PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
-# Main application executable
-add_executable(svg-converter apps/svg_converter.cpp)
-target_link_libraries(svg-converter PRIVATE nwss-cnc)
+# Define source files for the GUI application
+set(GUI_SOURCES
+    src/gui/mainwindow.cpp
+    src/gui/gcodeeditor.cpp
+    src/gui/gcodeviewer3d.cpp
+    src/gui/svgviewer.cpp
+    src/gui/gcodeoptionspanel.cpp
+    src/gui/svgtogcode.cpp
+)
 
-# Config wizard application
-add_executable(config-wizard apps/config_wizard.cpp)
-target_link_libraries(config-wizard PRIVATE nwss-cnc)
+# Define header files for the GUI application
+set(GUI_HEADERS
+    include/gui/mainwindow.h
+    include/gui/gcodeeditor.h
+    include/gui/gcodeviewer3d.h
+    include/gui/svgviewer.h
+    include/gui/gcodeoptionspanel.h
+    include/gui/svgtogcode.h
+)
+
+# Define resources
+set(RESOURCES
+    resources/resources.qrc
+)
+
+# Create the main executable
+add_executable(nwss-cnc src/main.cpp ${GUI_SOURCES} ${GUI_HEADERS} ${RESOURCES})
+
+# Link libraries
+target_link_libraries(nwss-cnc PRIVATE
+    nwss-cnc-core
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::OpenGLWidgets
+    Qt6::Svg
+    Qt6::SvgWidgets
+    Qt6::SerialPort
+)
+
+# Include directories for GUI
+target_include_directories(nwss-cnc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/gui)
 
 # Copy example SVG files to build directory
 file(COPY ${PROJECT_SOURCE_DIR}/example_files/ DESTINATION ${CMAKE_BINARY_DIR}/example_files/)
 
 # Install targets
-install(TARGETS nwss-cnc svg-converter config-wizard
-    EXPORT nwss-cnc-targets
+install(TARGETS nwss-cnc nwss-cnc-core
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
 )
 
+# Install header files (optional)
 install(DIRECTORY include/ DESTINATION include)
-
-# Export targets
-install(EXPORT nwss-cnc-targets
-    FILE nwss-cnc-targets.cmake
-    NAMESPACE NWSS::
-    DESTINATION lib/cmake/nwss-cnc
-)
-
-# Create and install config files
-include(CMakePackageConfigHelpers)
-write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/nwss-cnc-config-version.cmake"
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
-
-# Instead of using an external config template, we'll generate it here
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/nwss-cnc-config.cmake"
-"@PACKAGE_INIT@
-
-include(\"\${CMAKE_CURRENT_LIST_DIR}/nwss-cnc-targets.cmake\")
-
-check_required_components(nwss-cnc)
-")
-
-configure_package_config_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/nwss-cnc-config.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/nwss-cnc-config.cmake"
-    INSTALL_DESTINATION lib/cmake/nwss-cnc
-)
-
-install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/nwss-cnc-config.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/nwss-cnc-config-version.cmake"
-    DESTINATION lib/cmake/nwss-cnc
-)

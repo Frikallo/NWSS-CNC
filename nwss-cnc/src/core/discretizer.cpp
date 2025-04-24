@@ -1,5 +1,5 @@
-#include "nwss-cnc/discretizer.h"
-#include "third_party/nanosvg.h"
+#include "core/discretizer.h"
+#include "nanosvg.h"
 
 namespace nwss {
 namespace cnc {

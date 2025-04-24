@@ -1,4 +1,4 @@
-#include "nwss-cnc/config.h"
+#include "core/config.h"
 #include <fstream>
 #include <iostream>
 #include <algorithm>

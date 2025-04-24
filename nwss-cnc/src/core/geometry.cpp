@@ -1,4 +1,4 @@
-#include "nwss-cnc/geometry.h"
+#include "core/geometry.h"
 #include <functional>
 
 namespace nwss {

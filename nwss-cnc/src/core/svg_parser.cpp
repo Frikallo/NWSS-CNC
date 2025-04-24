@@ -1,5 +1,5 @@
-#include "nwss-cnc/svg_parser.h"
-#include "third_party/nanosvg.h"
+#include "core/svg_parser.h"
+#include "nanosvg.h"
 
 namespace nwss {
 namespace cnc {

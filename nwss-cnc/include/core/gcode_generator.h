@@ -1,8 +1,8 @@
 #ifndef NWSS_CNC_GCODE_GENERATOR_H
 #define NWSS_CNC_GCODE_GENERATOR_H
 
-#include "nwss-cnc/geometry.h"
-#include "nwss-cnc/config.h"
+#include "core/geometry.h"
+#include "core/config.h"
 #include <string>
 #include <vector>
 

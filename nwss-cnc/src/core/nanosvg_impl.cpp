@@ -5,4 +5,4 @@
 
 // Define the implementation macro before including the header
 #define NANOSVG_IMPLEMENTATION
-#include "third_party/nanosvg.h"
+#include "nanosvg.h"
