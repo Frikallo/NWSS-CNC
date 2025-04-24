@@ -285,7 +285,7 @@ void GCodeViewer3D::drawGrid()
         lineCount++; // Ensure odd number of lines for symmetry
     }
     
-    float start = -(static_cast<float>(lineCount) / 2) * step;
+    float start = -(lineCount / 2) * step;
     for (int i = 0; i < lineCount; i++) {
         float pos = start + i * step;
         
@@ -486,12 +486,13 @@ void GCodeViewer3D::autoScaleToFit()
     // Calculate diagonal length of model
     float diagonal = modelDimensions.length();
     
-    // Calculate scale factor to fit model in view (with 20% margin)
-    // The magic number 250.0f is based on perspective settings
-    float targetScale = 250.0f / diagonal;
+    // Calculate scale factor to fit model in view with margin
+    // The original scale calculation was inverted - a smaller scale 
+    // actually means more zoomed in because of how it's applied in paintGL()
+    float targetScale = diagonal / 250.0f;
     
-    // Add 20% margin
-    targetScale *= 0.5f;
+    // Add margin (making scale bigger means more zoomed out)
+    targetScale *= 1.5f;
     
     // Limit scale to reasonable bounds
     if (targetScale < 0.1f) targetScale = 0.1f;
@@ -503,8 +504,8 @@ void GCodeViewer3D::autoScaleToFit()
     qDebug() << "Auto-scaled to fit. Model size:" << diagonal << "New scale:" << scale;
     
     // Reset view rotation for initial view
-    rotationX = 0.0f;
-    rotationY = 0.0f;
+    rotationX = 30.0f;  // Give a slightly angled view for better 3D perspective
+    rotationY = -45.0f;
     
     update();
 }

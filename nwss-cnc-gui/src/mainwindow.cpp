@@ -14,6 +14,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), isUntitled(true)
 {
     // Create the main widgets
+    this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     gCodeEditor = new GCodeEditor(this);
     gCodeViewer = new GCodeViewer3D(this);
 

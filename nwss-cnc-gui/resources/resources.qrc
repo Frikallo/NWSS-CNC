@@ -1,0 +1,7 @@
+<!DOCTYPE RCC>
+<RCC>
+    <qresource prefix="/">
+        <file>fonts/JetBrainsMono-Regular.ttf</file>
+        <file>icons/nwss-cnc-icon.png</file>
+    </qresource>
+</RCC>

@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include <QApplication>
 #include <QSurfaceFormat>
+#include <QIcon>
 
 int main(int argc, char *argv[])
 {
@@ -12,6 +13,9 @@ int main(int argc, char *argv[])
     QSurfaceFormat::setDefaultFormat(format);
     
     QApplication app(argc, argv);
+    
+    // Set application icon
+    app.setWindowIcon(QIcon(":/icons/nwss-cnc-icon.png"));
     
     MainWindow mainWindow;
     mainWindow.setWindowTitle("NWSS-CNC");

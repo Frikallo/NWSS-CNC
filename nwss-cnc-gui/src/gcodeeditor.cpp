@@ -1,6 +1,7 @@
 #include "gcodeeditor.h"
 #include <QPainter>
 #include <QTextBlock>
+#include <QFontDatabase>
 
 // GCode Highlighter implementation
 GCodeHighlighter::GCodeHighlighter(QTextDocument *parent)
@@ -60,15 +61,25 @@ GCodeEditor::GCodeEditor(QWidget *parent)
     updateLineNumberAreaWidth(0);
     highlightCurrentLine();
     
-    // Set a monospaced font
-    QFont font;
-    font.setFamily("Courier");
-    font.setFixedPitch(true);
-    font.setPointSize(10);
-    setFont(font);
+    // Declare font variable at this scope so it's available throughout the function
+    QFont editorFont;
+    
+    // Try to load custom font
+    int fontId = QFontDatabase::addApplicationFont(":/fonts/JetBrainsMono-Regular.ttf");
+    if (fontId != -1) {
+        editorFont.setFamily("JetBrains Mono");
+    } else {
+        // Fallback to a system font if custom font can't be loaded
+        editorFont.setFamily("Courier");
+    }
+    
+    // Common font settings
+    editorFont.setFixedPitch(true);
+    editorFont.setPointSize(10);
+    setFont(editorFont);
     
     // Set tab stop width
-    QFontMetrics metrics(font);
+    QFontMetrics metrics(editorFont);
     setTabStopDistance(4 * metrics.horizontalAdvance(' '));
 }
 
@@ -81,7 +92,7 @@ int GCodeEditor::lineNumberAreaWidth()
         ++digits;
     }
     
-    int space = 3 + fontMetrics().horizontalAdvance(QLatin1Char('9')) * digits;
+    int space = 5 + fontMetrics().horizontalAdvance(QLatin1Char('9')) * digits;
     return space;
 }
 

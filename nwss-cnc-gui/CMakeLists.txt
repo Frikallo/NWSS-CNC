@@ -26,8 +26,13 @@ set(HEADERS
     src/gcodeviewer3d.h
 )
 
+# UI files
+set(RESOURCES
+    resources/resources.qrc
+)
+
 # Create executable
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${RESOURCES})
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
