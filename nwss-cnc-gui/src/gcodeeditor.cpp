@@ -47,7 +47,6 @@ void GCodeHighlighter::highlightBlock(const QString &text)
     }
 }
 
-// GCode Editor implementation
 GCodeEditor::GCodeEditor(QWidget *parent)
     : QPlainTextEdit(parent)
 {
@@ -81,6 +80,14 @@ GCodeEditor::GCodeEditor(QWidget *parent)
     // Set tab stop width
     QFontMetrics metrics(editorFont);
     setTabStopDistance(4 * metrics.horizontalAdvance(' '));
+    
+    // Customize cursor appearance
+    setupCustomCursor();
+}
+
+void GCodeEditor::setupCustomCursor()
+{
+    setCursorWidth(2);
 }
 
 int GCodeEditor::lineNumberAreaWidth()
@@ -92,7 +99,7 @@ int GCodeEditor::lineNumberAreaWidth()
         ++digits;
     }
     
-    int space = 5 + fontMetrics().horizontalAdvance(QLatin1Char('9')) * digits;
+    int space = 3 + fontMetrics().horizontalAdvance(QLatin1Char('9')) * digits;
     return space;
 }
 

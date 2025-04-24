@@ -43,6 +43,7 @@ public:
     
     void lineNumberAreaPaintEvent(QPaintEvent *event);
     int lineNumberAreaWidth();
+    void setupCustomCursor();
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
