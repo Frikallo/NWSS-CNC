@@ -70,6 +70,7 @@ GCodeEditor::GCodeEditor(QWidget *parent)
     } else {
         // Fallback to a system font if custom font can't be loaded
         editorFont.setFamily("Courier");
+        qDebug() << "Failed to load custom font, using Courier instead.";
     }
     
     // Common font settings

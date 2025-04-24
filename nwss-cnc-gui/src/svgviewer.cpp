@@ -89,7 +89,7 @@ void SVGView::updateRasterizedImage()
     if (!m_renderer) return;
     
     // Calculate image size based on zoom level
-    QSize imageSize = m_baseSize * m_zoomFactor;
+    QSize imageSize = m_baseSize * std::max(1.0, (m_zoomFactor / 10));
     
     // Create a new pixmap and render the SVG into it
     m_rasterizedImage = QPixmap(imageSize);
