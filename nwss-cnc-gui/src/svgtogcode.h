@@ -4,49 +4,60 @@
 
 #include <QString>
 #include <QObject>
-#include <QMap>
+
+// Forward declarations for nwss-cnc library types
+namespace nwss {
+namespace cnc {
+    class SVGParser;
+    class Discretizer;
+    class GCodeGenerator;
+    struct DiscretizerConfig;
+    class Path;
+}
+}
 
 class SvgToGCode : public QObject
 {
     Q_OBJECT
 
 public:
-    enum ConversionMode {
-        Outline,    // 2D outline cut along SVG paths
-        Pocket,     // 2D pocket/area clearing inside SVG paths
-        Engrave,    // 2D engraving along SVG paths
-        VCarve      // 3D V-carving based on SVG paths
-    };
-    
     SvgToGCode(QObject *parent = nullptr);
+    ~SvgToGCode();
     
     // Convert SVG file to GCode with given parameters
     QString convertSvgToGCode(
         const QString &svgFilePath,
-        ConversionMode mode,
-        double toolDiameter,
+        int bezierSamples,
+        double simplifyTolerance,
+        double adaptiveSampling,
+        double maxPointDistance,
+        double bedWidth,
+        double bedHeight,
+        std::string units,
+        double materialWidth,
+        double materialHeight,
+        double materialThickness,
         double feedRate,
         double plungeRate,
+        double spindleSpeed,
         double passDepth,
-        double totalDepth,
-        double safetyHeight
-    );
+        int passCount,
+        double safetyHeight,
+        bool preserveAspectRatio,
+        bool centerDesign,
+        bool flipY,
+        bool optimizePaths,
+        bool closeLoops,
+        bool separateRetract,
+        bool linearizePaths,
+        double linearizeTolerance,
+        double toolDiameter);
     
     // Get any error that occurred during conversion
     QString lastError() const { return m_lastError; }
     
 private:
     QString m_lastError;
-    
-    // Helper methods for different conversion strategies
-    QString generateOutlineGCode(const QString &svgPath);
-    QString generatePocketGCode(const QString &svgPath);
-    QString generateEngraveGCode(const QString &svgPath);
-    QString generateVCarveGCode(const QString &svgPath);
-    
-    // Common GCode generation helpers
-    QString generateHeader(double toolDiameter, double feedRate, double safetyHeight);
-    QString generateFooter();
 };
 
 #endif // SVGTOGCODE_H

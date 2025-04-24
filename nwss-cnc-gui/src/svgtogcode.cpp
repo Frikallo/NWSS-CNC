@@ -1,24 +1,52 @@
 // svgtogcode.cpp
 #include "svgtogcode.h"
-#include <QSvgRenderer>
-#include <QPainterPath>
 #include <QFile>
 #include <QDateTime>
+#include <QFileInfo>
+
+// Include necessary library headers
+#include "nwss-cnc/svg_parser.h"
+#include "nwss-cnc/discretizer.h"
+#include "nwss-cnc/config.h"
+#include "nwss-cnc/transform.h"
+#include "nwss-cnc/gcode_generator.h"
 
 SvgToGCode::SvgToGCode(QObject *parent)
     : QObject(parent)
 {
 }
 
+SvgToGCode::~SvgToGCode()
+{
+}
+
 QString SvgToGCode::convertSvgToGCode(
     const QString &svgFilePath,
-    ConversionMode mode,
-    double toolDiameter,
+    int bezierSamples,
+    double simplifyTolerance,
+    double adaptiveSampling,
+    double maxPointDistance,
+    double bedWidth,
+    double bedHeight,
+    std::string units,
+    double materialWidth,
+    double materialHeight,
+    double materialThickness,
     double feedRate,
     double plungeRate,
+    double spindleSpeed,
     double passDepth,
-    double totalDepth,
-    double safetyHeight)
+    int passCount,
+    double safetyHeight,
+    bool preserveAspectRatio,
+    bool centerDesign,
+    bool flipY,
+    bool optimizePaths,
+    bool closeLoops,
+    bool separateRetract,
+    bool linearizePaths,
+    double linearizeTolerance,
+    double toolDiameter)
 {
     m_lastError.clear();
     
@@ -29,123 +57,74 @@ QString SvgToGCode::convertSvgToGCode(
         return QString();
     }
     
-    // Generate GCode based on the selected mode
-    QString gcode;
-    
-    // Add common header
-    gcode += generateHeader(toolDiameter, feedRate, safetyHeight);
-    
-    // Generate GCode based on selected mode
-    switch (mode) {
-    case Outline:
-        gcode += generateOutlineGCode(svgFilePath);
-        break;
-    case Pocket:
-        gcode += generatePocketGCode(svgFilePath);
-        break;
-    case Engrave:
-        gcode += generateEngraveGCode(svgFilePath);
-        break;
-    case VCarve:
-        gcode += generateVCarveGCode(svgFilePath);
-        break;
+    nwss::cnc::SVGParser parser;
+    if (!parser.loadFromFile(svgFilePath.toStdString(), "mm", 96.0f)) {
+        m_lastError = "Failed to load SVG file: " + svgFilePath;
+        return QString();
     }
-    
-    // Add common footer
-    gcode += generateFooter();
-    
-    // Placeholder for actual implementation
-    if (gcode.isEmpty()) {
-        gcode = "; This is a placeholder GCode generated from " + svgFilePath + "\n";
-        gcode += "; A real implementation would convert SVG paths to actual toolpaths\n\n";
-        gcode += "G21 ; Set units to mm\n";
-        gcode += "G90 ; Set to absolute positioning\n";
-        gcode += "G17 ; XY plane selection\n\n";
-        gcode += "G0 Z" + QString::number(safetyHeight) + " ; Move to safety height\n";
-        gcode += "G0 X0 Y0 ; Move to origin\n\n";
-        gcode += "M3 S" + QString::number(int(12000)) + " ; Start spindle\n";
-        gcode += "G4 P2 ; Wait 2 seconds for spindle to spin up\n\n";
-        
-        // Generate a sample toolpath (a square and circle) for demonstration
-        gcode += "; Example toolpath (not based on actual SVG)\n";
-        gcode += "G0 X10 Y10 ; Move to start position\n";
-        gcode += "G1 Z0 F" + QString::number(plungeRate) + " ; Plunge to surface\n\n";
-        
-        // Create multiple passes if needed
-        int passes = qCeil(totalDepth / passDepth);
-        for (int pass = 0; pass < passes; pass++) {
-            double depth = -std::min((pass + 1) * passDepth, totalDepth);
-            
-            gcode += "; Pass " + QString::number(pass + 1) + " - Depth: " + QString::number(depth) + "mm\n";
-            gcode += "G1 Z" + QString::number(depth) + " F" + QString::number(plungeRate) + " ; Plunge to pass depth\n";
-            gcode += "G1 X50 Y10 F" + QString::number(feedRate) + " ; Cut line\n";
-            gcode += "G1 X50 Y50 ; Cut line\n";
-            gcode += "G1 X10 Y50 ; Cut line\n";
-            gcode += "G1 X10 Y10 ; Cut line (return to start)\n\n";
-            
-            // Add a circle in the middle
-            gcode += "; Circle in the middle\n";
-            gcode += "G0 X30 Y30 ; Move to center of square\n";
-            
-            // Generate a circle with G2 command
-            gcode += "G1 X40 Y30 ; Move to edge of circle\n";
-            gcode += "G2 X30 Y40 I-10 J0 ; Arc segment\n";
-            gcode += "G2 X20 Y30 I0 J-10 ; Arc segment\n";
-            gcode += "G2 X30 Y20 I10 J0 ; Arc segment\n";
-            gcode += "G2 X40 Y30 I0 J10 ; Arc segment (complete circle)\n\n";
-            
-            // Return to safe Z height between passes
-            gcode += "G0 Z" + QString::number(safetyHeight) + " ; Return to safe height\n\n";
-        }
-        
-        gcode += "M5 ; Stop spindle\n";
-        gcode += "G0 Z" + QString::number(safetyHeight) + " ; Return to safe height\n";
-        gcode += "G0 X0 Y0 ; Return to origin\n";
-        gcode += "M2 ; End program\n";
+
+    float width, height;
+    if (parser.getDimensions(width, height)) {
+        qDebug() << "SVG Dimensions: " << width << " x " << height << " mm";
+    } else {
+        m_lastError = "Failed to get SVG dimensions.";
+        return QString();
     }
-    
-    return gcode;
-}
 
-QString SvgToGCode::generateHeader(double toolDiameter, double feedRate, double safetyHeight)
-{
-    QString header;
-    header += "; GCode generated from SVG\n";
-    header += "; Generated on: " + QDateTime::currentDateTime().toString() + "\n";
-    header += "; Tool diameter: " + QString::number(toolDiameter) + "mm\n";
-    header += "; Feed rate: " + QString::number(feedRate) + "mm/min\n";
-    header += "; Safety height: " + QString::number(safetyHeight) + "mm\n\n";
-    
-    return header;
-}
+    nwss::cnc::Discretizer discretizer;
+    nwss::cnc::DiscretizerConfig discretizerConfig;
+    discretizerConfig.bezierSamples = bezierSamples;
+    discretizerConfig.simplifyTolerance = simplifyTolerance;
+    discretizerConfig.adaptiveSampling = adaptiveSampling;
+    discretizerConfig.maxPointDistance = maxPointDistance;
+    discretizer.setConfig(discretizerConfig);
+    nwss::cnc::CNConfig CNconfig;
+    CNconfig.setBedWidth(bedWidth);
+    CNconfig.setBedHeight(bedHeight);
+    CNconfig.setUnitsFromString(units);
+    CNconfig.setMaterialWidth(bedWidth);
+    CNconfig.setMaterialHeight(bedHeight);
+    CNconfig.setMaterialThickness(materialThickness);
+    CNconfig.setFeedRate(feedRate);
+    CNconfig.setPlungeRate(plungeRate);
+    CNconfig.setSpindleSpeed(spindleSpeed);
+    CNconfig.setCutDepth(passDepth);
+    CNconfig.setPassCount(passCount);
+    CNconfig.setSafeHeight(safetyHeight);
 
-QString SvgToGCode::generateFooter()
-{
-    QString footer;
-    footer += "\n; End of generated GCode\n";
-    return footer;
-}
+    std::vector<nwss::cnc::Path> allPaths = discretizer.discretizeImage(parser.getRawImage());
 
-QString SvgToGCode::generateOutlineGCode(const QString &svgPath)
-{
-    // Placeholder - in a real implementation, this would trace the SVG outlines
-    return QString();
-}
+    double minX, minY, maxX, maxY;
+    if (nwss::cnc::Transform::getBounds(allPaths, minX, minY, maxX, maxY)) {
+        double width = maxX - minX;
+        double height = maxY - minY;
+    }
 
-QString SvgToGCode::generatePocketGCode(const QString &svgPath)
-{
-    // Placeholder - in a real implementation, this would generate pocket clearing operations
-    return QString();
-}
+    nwss::cnc::TransformInfo transformInfo;
+    if (nwss::cnc::Transform::fitToMaterial(allPaths, CNconfig, preserveAspectRatio, 
+                                centerDesign, centerDesign, flipY, &transformInfo)) {
+        qDebug() << "Transform Info: " << nwss::cnc::Transform::formatTransformInfo(transformInfo, CNconfig);
+    } else {
+        m_lastError = "Failed to fit paths to material.";
+        return QString();
+    }
 
-QString SvgToGCode::generateEngraveGCode(const QString &svgPath)
-{
-    // Placeholder - in a real implementation, this would generate engraving toolpaths
-    return QString();
-}
+    nwss::cnc::GCodeGenerator gCodeGen;
+    nwss::cnc::GCodeOptions gCodeOptions;
+    gCodeOptions.optimizePaths = optimizePaths;
+    gCodeOptions.closeLoops = closeLoops;
+    gCodeOptions.separateRetract = separateRetract;
+    gCodeOptions.linearizePaths = linearizePaths;
+    gCodeOptions.linearizeTolerance = linearizeTolerance;
+    gCodeOptions.toolDiameter = toolDiameter;
+    gCodeGen.setConfig(CNconfig);
+    gCodeGen.setOptions(gCodeOptions);
 
-QString SvgToGCode::generateVCarveGCode(const QString &svgPath)
-{
-    // Placeholder - in a real implementation, this would generate V-carving toolpaths
-    return QString();
+    std::string gCode = gCodeGen.generateGCodeString(allPaths);
+    if (gCode.empty()) {
+        m_lastError = "Failed to generate GCode.";
+        return QString();
+    }
+    QString gCodeString = QString::fromStdString(gCode);
+    return gCodeString;
 }

@@ -1,5 +1,6 @@
 // mainwindow.cpp (updated)
 #include "mainwindow.h"
+#include "gcodeoptionspanel.h"
 #include <QApplication>
 #include <QSettings>
 #include <QCloseEvent>
@@ -109,6 +110,8 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::updateGCodePreview);
     connect(tabWidget, &QTabWidget::currentChanged,
             this, &MainWindow::onTabChanged);
+    connect(gcodeOptionsPanel, &GCodeOptionsPanel::generateGCode,
+            this, &MainWindow::convertSvgToGCode);
     connect(svgViewer, &SVGViewer::convertToGCode,
             this, &MainWindow::convertSvgToGCode);
 
@@ -500,22 +503,45 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
         return;
     }
     
-    // Get parameters from the GCode options panel
-    double toolDiameter = 3.0; // Default value
+    // Get all parameters from the GCode options panel
+    double toolDiameter = gcodeOptionsPanel->getToolDiameter();
     double feedRate = gcodeOptionsPanel->getFeedRate();
     double plungeRate = gcodeOptionsPanel->getPlungeRate();
-    double passDepth = gcodeOptionsPanel->getPassDepth();
-    double totalDepth = gcodeOptionsPanel->getTotalDepth();
+    double passDepth = gcodeOptionsPanel->getCutDepth();
+    int passCount = gcodeOptionsPanel->getPassCount();
     double safetyHeight = gcodeOptionsPanel->getSafetyHeightEnabled() ? 
                            gcodeOptionsPanel->getSafetyHeight() : 5.0;
+    bool optimizePaths = gcodeOptionsPanel->getOptimizePaths();
+    bool linearizePaths = gcodeOptionsPanel->getLinearizePaths();
     
-    // Determine conversion mode
-    SvgToGCode::ConversionMode mode = SvgToGCode::Outline; // Default
-    
-    // Convert SVG to GCode
+    // Convert SVG to GCode using all settings
     QString gcode = svgToGCode->convertSvgToGCode(
-        svgFile, mode, toolDiameter, feedRate, plungeRate, 
-        passDepth, totalDepth, safetyHeight
+        svgFile,
+        gcodeOptionsPanel->getBezierSamples(),
+        gcodeOptionsPanel->getSimplifyTolerance(),
+        gcodeOptionsPanel->getAdaptiveSampling(),
+        gcodeOptionsPanel->getMaxPointDistance(),
+        gcodeOptionsPanel->getBedWidth(),
+        gcodeOptionsPanel->getBedHeight(),
+        "mm",
+        gcodeOptionsPanel->getMaterialWidth(),
+        gcodeOptionsPanel->getMaterialHeight(),
+        gcodeOptionsPanel->getMaterialThickness(),
+        gcodeOptionsPanel->getFeedRate(),
+        gcodeOptionsPanel->getPlungeRate(),
+        gcodeOptionsPanel->getSpindleSpeed(),
+        gcodeOptionsPanel->getCutDepth(),
+        gcodeOptionsPanel->getPassCount(),
+        gcodeOptionsPanel->getSafetyHeight(),
+        gcodeOptionsPanel->getPreserveAspectRatio(),
+        gcodeOptionsPanel->getCenterX(),
+        gcodeOptionsPanel->getFlipY(),
+        gcodeOptionsPanel->getOptimizePaths(),
+        false,
+        false,
+        gcodeOptionsPanel->getLinearizePaths(),
+        0.01,
+        gcodeOptionsPanel->getToolDiameter()
     );
     
     if (gcode.isEmpty()) {
