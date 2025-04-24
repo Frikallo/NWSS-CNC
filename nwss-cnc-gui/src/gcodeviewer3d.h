@@ -49,6 +49,7 @@ private:
     void parseGCode(const QString &gcode);
     void updatePathVertices();
     void autoScaleToFit();
+    void setIsometricView();
     
     QOpenGLShaderProgram gridProgram;
     QOpenGLShaderProgram pathProgram;
@@ -63,8 +64,9 @@ private:
     QMatrix4x4 view;
     QMatrix4x4 model;
     
-    float rotationX;
-    float rotationY;
+    // Camera control variables
+    QVector3D cameraPosition;
+    QVector3D cameraTarget;
     float scale;
     QPoint lastMousePos;
     

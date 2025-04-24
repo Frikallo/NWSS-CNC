@@ -7,8 +7,8 @@ GCodeViewer3D::GCodeViewer3D(QWidget *parent)
     : QOpenGLWidget(parent),
       gridVbo(QOpenGLBuffer::VertexBuffer),
       pathVbo(QOpenGLBuffer::VertexBuffer),
-      rotationX(0.0f),
-      rotationY(0.0f),
+      cameraPosition(0.0f, 0.0f, 0.0f),
+      cameraTarget(0.0f, 0.0f, 0.0f),
       scale(0.5f),
       minBounds(-50.0f, -50.0f, -50.0f),
       maxBounds(50.0f, 50.0f, 50.0f),
@@ -61,7 +61,7 @@ void GCodeViewer3D::initializeGL()
     gridVao.bind();
     gridVbo.create();
     gridVbo.bind();
-    gridVbo.allocate(nullptr, 1024 * sizeof(float)); // Allocate space for grid lines
+    gridVbo.allocate(nullptr, 4096 * sizeof(float)); // Allocate more space for grid lines
     gridVao.release();
     
     pathVao.create();
@@ -72,10 +72,10 @@ void GCodeViewer3D::initializeGL()
     pathVao.release();
     
     // Initialize matrices
-    view.setToIdentity();
-    view.translate(0.0f, 0.0f, -500.0f);
-    
     model.setToIdentity();
+    
+    // Set default camera position for isometric view
+    setIsometricView();
     
     // Empty tool path for initial display
     toolPath.clear();
@@ -86,6 +86,26 @@ void GCodeViewer3D::initializeGL()
     
     updatePathVertices();
 }
+
+void GCodeViewer3D::setIsometricView()
+{
+    // Distance from origin
+    float distance = 500.0f;
+    
+    // Create an isometric view rotated 90 degrees around Z
+    // Instead of (1,1,1), use a different direction vector
+    QVector3D isoDirection(1.0f, -1.0f, 1.0f); // Rotated 90 degrees around Z
+    isoDirection.normalize();
+    
+    // Position camera for isometric projection
+    cameraPosition = isoDirection * distance;
+    cameraTarget = QVector3D(0.0f, 0.0f, 0.0f);
+    
+    // Update view matrix
+    view.setToIdentity();
+    view.lookAt(cameraPosition, cameraTarget, QVector3D(0.0f, 0.0f, 1.0f));
+}
+
 
 void GCodeViewer3D::setupGridShaders()
 {
@@ -187,7 +207,7 @@ void GCodeViewer3D::resizeGL(int width, int height)
     
     // Update projection matrix
     projection.setToIdentity();
-    projection.perspective(45.0f, aspectRatio, 0.1f, 1000.0f);
+    projection.perspective(45.0f, aspectRatio, 0.1f, 2000.0f);
     
     // Re-fit the model to the new view size if appropriate
     if (autoScaleEnabled && hasValidToolPath) {
@@ -199,11 +219,17 @@ void GCodeViewer3D::paintGL()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
-    view.setToIdentity();
-    view.translate(0.0f, 0.0f, -500.0f * scale);
-    view.rotate(rotationX, 1.0f, 0.0f, 0.0f);
-    view.rotate(rotationY, 0.0f, 1.0f, 0.0f);
+    // Maintain isometric view while applying scale
+    QVector3D viewDirection = (cameraPosition - cameraTarget).normalized();
+    float viewDistance = 500.0f / scale; // Scale affects how far away we are
     
+    QVector3D scaledPosition = cameraTarget + viewDirection * viewDistance;
+    
+    // Update view matrix without rotation
+    view.setToIdentity();
+    view.lookAt(scaledPosition, cameraTarget, QVector3D(0.0f, 0.0f, 1.0f));
+    
+    // Apply rotation to the model matrix instead
     model.setToIdentity();
     
     drawGrid();
@@ -226,83 +252,59 @@ void GCodeViewer3D::drawGrid()
     
     gridVao.bind();
     
-    // Calculate grid size based on model bounds but ensure it's always a "nice" number
+    // Create grid that appears infinite
     float gridSize;
     float step;
     
-    if (hasValidToolPath) {
-        // Calculate grid based on model size when there's a valid model
-        float modelSize = std::max({
-            std::abs(maxBounds.x() - minBounds.x()),
-            std::abs(maxBounds.y() - minBounds.y()),
-            std::abs(maxBounds.z() - minBounds.z())
-        });
-        
-        // Ensure minimum grid size and round up to next multiple of 100
-        gridSize = std::max(modelSize * 1.5f, 100.0f);
-        gridSize = std::ceil(gridSize / 100.0f) * 100.0f;
-        
-        // Calculate grid line spacing (ensure it's a power of 10)
-        step = 10.0f;
-        while (step * 20 < gridSize) {
-            step *= 10.0f;
-        }
-    } else {
-        // For empty view, use a simple 5x5 grid with 10mm spacing
-        gridSize = 100.0f; // 50mm in each direction
-        step = 10.0f;      // 10mm between grid lines
-    }
-    
-    float halfSize = gridSize / 2.0f;
+    // Use consistent grid size and spacing
+    gridSize = 500.0f; // Large grid to appear "infinite"
+    step = 10.0f;      // Consistent spacing of 10mm
     
     std::vector<float> gridVertices;
     
     // X-axis (red)
-    gridVertices.push_back(-halfSize); gridVertices.push_back(0); gridVertices.push_back(0);
+    gridVertices.push_back(-gridSize); gridVertices.push_back(0); gridVertices.push_back(0);
     gridVertices.push_back(1.0f); gridVertices.push_back(0.0f); gridVertices.push_back(0.0f);
     
-    gridVertices.push_back(halfSize); gridVertices.push_back(0); gridVertices.push_back(0);
+    gridVertices.push_back(gridSize); gridVertices.push_back(0); gridVertices.push_back(0);
     gridVertices.push_back(1.0f); gridVertices.push_back(0.0f); gridVertices.push_back(0.0f);
     
     // Y-axis (green)
-    gridVertices.push_back(0); gridVertices.push_back(-halfSize); gridVertices.push_back(0);
+    gridVertices.push_back(0); gridVertices.push_back(-gridSize); gridVertices.push_back(0);
     gridVertices.push_back(0.0f); gridVertices.push_back(1.0f); gridVertices.push_back(0.0f);
     
-    gridVertices.push_back(0); gridVertices.push_back(halfSize); gridVertices.push_back(0);
+    gridVertices.push_back(0); gridVertices.push_back(gridSize); gridVertices.push_back(0);
     gridVertices.push_back(0.0f); gridVertices.push_back(1.0f); gridVertices.push_back(0.0f);
     
     // Z-axis (blue)
-    gridVertices.push_back(0); gridVertices.push_back(0); gridVertices.push_back(-halfSize);
+    gridVertices.push_back(0); gridVertices.push_back(0); gridVertices.push_back(-gridSize);
     gridVertices.push_back(0.0f); gridVertices.push_back(0.0f); gridVertices.push_back(1.0f);
     
-    gridVertices.push_back(0); gridVertices.push_back(0); gridVertices.push_back(halfSize);
+    gridVertices.push_back(0); gridVertices.push_back(0); gridVertices.push_back(gridSize);
     gridVertices.push_back(0.0f); gridVertices.push_back(0.0f); gridVertices.push_back(1.0f);
     
     // Grid lines (light gray)
-    // Ensure we draw complete grid lines at even spacing
-    int lineCount = static_cast<int>(gridSize / step);
-    if (lineCount % 2 == 0) {
-        lineCount++; // Ensure odd number of lines for symmetry
-    }
+    // Create more grid lines for an "infinite" appearance
+    int lineCount = static_cast<int>(gridSize / step) * 2;
     
-    float start = -(lineCount / 2) * step;
-    for (int i = 0; i < lineCount; i++) {
+    float start = -gridSize;
+    for (int i = 0; i <= lineCount; i++) {
         float pos = start + i * step;
         
         if (std::abs(pos) < 0.001f) continue; // Skip center lines (already drawn as axes)
         
         // Lines parallel to X-axis
-        gridVertices.push_back(-halfSize); gridVertices.push_back(pos); gridVertices.push_back(0);
+        gridVertices.push_back(-gridSize); gridVertices.push_back(pos); gridVertices.push_back(0);
         gridVertices.push_back(0.3f); gridVertices.push_back(0.3f); gridVertices.push_back(0.3f);
         
-        gridVertices.push_back(halfSize); gridVertices.push_back(pos); gridVertices.push_back(0);
+        gridVertices.push_back(gridSize); gridVertices.push_back(pos); gridVertices.push_back(0);
         gridVertices.push_back(0.3f); gridVertices.push_back(0.3f); gridVertices.push_back(0.3f);
         
         // Lines parallel to Y-axis
-        gridVertices.push_back(pos); gridVertices.push_back(-halfSize); gridVertices.push_back(0);
+        gridVertices.push_back(pos); gridVertices.push_back(-gridSize); gridVertices.push_back(0);
         gridVertices.push_back(0.3f); gridVertices.push_back(0.3f); gridVertices.push_back(0.3f);
         
-        gridVertices.push_back(pos); gridVertices.push_back(halfSize); gridVertices.push_back(0);
+        gridVertices.push_back(pos); gridVertices.push_back(gridSize); gridVertices.push_back(0);
         gridVertices.push_back(0.3f); gridVertices.push_back(0.3f); gridVertices.push_back(0.3f);
     }
     
@@ -318,8 +320,12 @@ void GCodeViewer3D::drawGrid()
     gridProgram.setAttributeBuffer(1, GL_FLOAT, 3 * sizeof(float), 3, 6 * sizeof(float));
     
     // Draw grid lines
-    glLineWidth(2.0f);
+    glLineWidth(1.0f);
     glDrawArrays(GL_LINES, 0, gridVertices.size() / 6);
+    
+    // Draw axes with thicker lines
+    glLineWidth(2.0f);
+    glDrawArrays(GL_LINES, 0, 6); // Just the 3 main axes (6 vertices)
     
     gridVao.release();
     gridProgram.release();
@@ -416,15 +422,44 @@ void GCodeViewer3D::mousePressEvent(QMouseEvent *event)
 void GCodeViewer3D::mouseMoveEvent(QMouseEvent *event)
 {
     if (event->buttons() & Qt::LeftButton) {
+        // Calculate mouse movement delta
         int dx = event->pos().x() - lastMousePos.x();
         int dy = event->pos().y() - lastMousePos.y();
         
-        rotationY += dx * 0.5f;
-        rotationX += dy * 0.5f;
+        // Calculate pan speed based on scale (slower pan when zoomed in)
+        float panSpeed = 1.0f / scale;
         
-        // Limit X rotation to avoid flipping
-        if (rotationX > 89.0f) rotationX = 89.0f;
-        if (rotationX < -89.0f) rotationX = -89.0f;
+        // Extract the camera right and up vectors from the view matrix
+        QVector3D rightVector(view(0, 0), view(0, 1), view(0, 2));
+        QVector3D upVector(view(1, 0), view(1, 1), view(1, 2));
+        
+        // Project these vectors onto the XY plane to prevent Z drift
+        rightVector.setZ(0);
+        upVector.setZ(0);
+        
+        // Normalize if they're not zero vectors
+        if (rightVector.length() > 0.001f) {
+            rightVector.normalize();
+        }
+        if (upVector.length() > 0.001f) {
+            upVector.normalize();
+        }
+        
+        // Since we rotate the model and not the view, we need to rotate our movement vector
+        // to match the rotated coordinate system
+        QVector3D movement = -rightVector * dx * panSpeed + upVector * dy * panSpeed;
+        
+        // Create a rotation matrix for our 90-degree Z rotation
+        QMatrix4x4 rotMat;
+        rotMat.setToIdentity();
+
+        // Apply rotation to the movement vector
+        QVector4D rotatedMovement = rotMat * QVector4D(movement, 0.0f);
+        movement = QVector3D(rotatedMovement.x(), rotatedMovement.y(), rotatedMovement.z());
+        
+        // Apply the rotated movement to camera position and target
+        cameraPosition += movement;
+        cameraTarget += movement;
         
         update();
     }
@@ -436,11 +471,15 @@ void GCodeViewer3D::wheelEvent(QWheelEvent *event)
 {
     float delta = event->angleDelta().y() / 120.0f;
     
-    scale *= (1.0f + 0.1f * delta);
+    // Adjust zoom speed based on current scale
+    float zoomFactor = 0.1f;
+    if (scale < 0.1f) zoomFactor = 0.01f; // Finer control at extreme zoom levels
     
-    // Limit zoom levels
-    if (scale < 0.1f) scale = 0.1f;
-    if (scale > 10.0f) scale = 10.0f;
+    scale *= (1.0f + zoomFactor * delta);
+    
+    // Expanded zoom range
+    if (scale < 0.001f) scale = 0.001f; // Allow much closer zoom
+    if (scale > 50.0f) scale = 50.0f;   // Allow much further zoom out
     
     update();
 }
@@ -454,8 +493,7 @@ void GCodeViewer3D::processGCode(const QString &gcode)
         hasValidToolPath = false;
         
         // Reset to default view
-        rotationX = 0.0f;
-        rotationY = 0.0f;
+        setIsometricView();
         scale = 0.5f;
         
         update();
@@ -487,19 +525,26 @@ void GCodeViewer3D::autoScaleToFit()
     float diagonal = modelDimensions.length();
     
     // Calculate scale factor to fit model in view with margin
-    // The original scale calculation was inverted - a smaller scale 
-    // actually means more zoomed in because of how it's applied in paintGL()
-    float targetScale = diagonal / 250.0f;
+    float targetScale = 250.0f / diagonal;
     
-    // Add margin (making scale bigger means more zoomed out)
-    targetScale *= 1.5f;
+    // Add margin (making scale smaller means more zoomed out)
+    targetScale *= 0.8f;
+    
+    // Adjust scale limits for very large models
+    float minScale = 0.001f; // Previously 0.1f
+    float maxScale = 50.0f;  // Previously 10.0f
     
     // Limit scale to reasonable bounds
-    if (targetScale < 0.1f) targetScale = 0.1f;
-    if (targetScale > 10.0f) targetScale = 10.0f;
+    if (targetScale < minScale) targetScale = minScale;
+    if (targetScale > maxScale) targetScale = maxScale;
     
     // Apply new scale
     scale = targetScale;
+    
+    // Center the view on the model
+    QVector3D modelCenter = (minBounds + maxBounds) * 0.5f;
+    cameraTarget = modelCenter;
+    cameraPosition = cameraTarget + (cameraPosition - cameraTarget);
     
     qDebug() << "Auto-scaled to fit. Model size:" << diagonal << "New scale:" << scale;
     
@@ -513,7 +558,7 @@ void GCodeViewer3D::handleResize()
     
     // Update projection matrix without changing other view parameters
     projection.setToIdentity();
-    projection.perspective(45.0f, aspectRatio, 0.1f, 1000.0f);
+    projection.perspective(45.0f, aspectRatio, 0.01f, 10000.0f);
     
     // Only update the display, don't change any view parameters
     update();
