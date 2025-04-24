@@ -6,7 +6,7 @@
 - [X] Optimize paths in cases where theres uniform circles or straight lines (instead of going to 100 points sequentially it could be one GCODE command)
 - [X] GCODE generator from positions + config
 - [X] load from + save to config file
-- [ ] Create onboarding GUI
+- [X] Create onboarding GUI
 - [ ] Write documentation
 - [X] Improve discretization algorithm
 - [ ] Add modes (direct cutout, etch, etc)
