@@ -4,7 +4,6 @@
 
 int main(int argc, char *argv[])
 {
-    // Set up OpenGL format for 3D rendering
     QSurfaceFormat format;
     format.setDepthBufferSize(24);
     format.setStencilBufferSize(8);
@@ -15,7 +14,7 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     
     MainWindow mainWindow;
-    mainWindow.setWindowTitle("NWSS-CNC: GCode Editor and Previewer");
+    mainWindow.setWindowTitle("NWSS-CNC");
     mainWindow.resize(1200, 800);
     mainWindow.show();
     

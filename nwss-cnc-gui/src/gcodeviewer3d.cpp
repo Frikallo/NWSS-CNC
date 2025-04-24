@@ -201,16 +201,14 @@ void GCodeViewer3D::paintGL()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
-    // Update view matrix with current rotation and scale
     view.setToIdentity();
     view.translate(0.0f, 0.0f, -500.0f * scale);
     view.rotate(rotationX, 1.0f, 0.0f, 0.0f);
     view.rotate(rotationY, 0.0f, 1.0f, 0.0f);
     
-    // Center the model
-    QVector3D center = (maxBounds + minBounds) * 0.5f;
     model.setToIdentity();
-    model.translate(-center);
+
+    qDebug() << rotationX << rotationY << scale;
     
     drawGrid();
     drawToolPath();
@@ -301,66 +299,87 @@ void GCodeViewer3D::drawGrid()
     gridProgram.release();
 }
 
-void GCodeViewer3D::drawToolPath()
-{
-    if (toolPath.empty() || !pathProgram.bind()) {
-        return;
-    }
-    
-    pathProgram.setUniformValue("projection", projection);
-    pathProgram.setUniformValue("view", view);
-    pathProgram.setUniformValue("model", model);
-    
-    pathVao.bind();
-    
-    // Set up vertex attributes
-    pathProgram.enableAttributeArray(0);
-    pathProgram.setAttributeBuffer(0, GL_FLOAT, 0, 3, 6 * sizeof(float));
-    
-    pathProgram.enableAttributeArray(1);
-    pathProgram.setAttributeBuffer(1, GL_FLOAT, 3 * sizeof(float), 3, 6 * sizeof(float));
-    
-    // Draw tool path
-    glLineWidth(3.0f);
-    glDrawArrays(GL_LINE_STRIP, 0, pathVertices.size() / 6);
-    
-    pathVao.release();
-    pathProgram.release();
-}
-
 void GCodeViewer3D::updatePathVertices()
 {
     if (toolPath.empty()) {
         return;
     }
     
+    // Clear previous data
     pathVertices.clear();
     
-    for (const auto &point : toolPath) {
-        // Position
+    // For each point in the tool path
+    for (size_t i = 0; i < toolPath.size(); i++) {
+        const auto &point = toolPath[i];
+        
+        // Add position coordinates
         pathVertices.push_back(point.position.x());
         pathVertices.push_back(point.position.y());
         pathVertices.push_back(point.position.z());
         
-        // Color (rapid moves are blue, cutting moves are green)
+        // Add color data
         if (point.isRapid) {
-            pathVertices.push_back(0.2f);
-            pathVertices.push_back(0.6f);
+            // Blue for rapid moves
+            pathVertices.push_back(0.0f);
+            pathVertices.push_back(0.5f);
             pathVertices.push_back(1.0f);
         } else {
-            pathVertices.push_back(0.2f);
+            // Green for cutting moves
+            pathVertices.push_back(0.0f);
             pathVertices.push_back(0.8f);
             pathVertices.push_back(0.2f);
         }
     }
     
-    // Update path VBO with new vertices
+    // Update GPU buffer
     makeCurrent();
     pathVao.bind();
     pathVbo.bind();
+    
+    // Make sure buffer is large enough
     pathVbo.allocate(pathVertices.data(), pathVertices.size() * sizeof(float));
+    
+    // Clear previous vertex attribute setup to avoid conflicts
+    pathProgram.bind();
+    pathProgram.enableAttributeArray(0);
+    pathProgram.setAttributeBuffer(0, GL_FLOAT, 0, 3, 6 * sizeof(float));
+    
+    pathProgram.enableAttributeArray(1);
+    pathProgram.setAttributeBuffer(1, GL_FLOAT, 3 * sizeof(float), 3, 6 * sizeof(float));
+    pathProgram.release();
+    
     pathVao.release();
     doneCurrent();
+}
+
+void GCodeViewer3D::drawToolPath()
+{
+    if (toolPath.empty() || pathVertices.empty()) {
+        return;
+    }
+    
+    if (!pathProgram.bind()) {
+        return;
+    }
+    
+    // Set shader uniforms
+    pathProgram.setUniformValue("projection", projection);
+    pathProgram.setUniformValue("view", view);
+    pathProgram.setUniformValue("model", model);
+    
+    pathVao.bind();
+    
+    // Use a separate draw call for each line segment
+    // This ensures we don't connect points that shouldn't be connected
+    glLineWidth(3.0f);
+    
+    for (size_t i = 0; i < toolPath.size() - 1; i++) {
+        // Draw just this segment
+        glDrawArrays(GL_LINES, i, 2);
+    }
+    
+    pathVao.release();
+    pathProgram.release();
 }
 
 void GCodeViewer3D::mousePressEvent(QMouseEvent *event)
@@ -414,17 +433,14 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
     
     // Initialize position and state
     QVector3D currentPos(0, 0, 0);
-    bool isMetric = true; // G21 is default (metric)
-    bool isAbsolute = true; // G90 is default (absolute coordinates)
-    bool isRapid = true; // Start with rapid movement
+    bool isMetric = true;  // G21 is default (metric)
+    bool isAbsolute = true;  // G90 is default (absolute coordinates)
+    bool isRapid = true;  // Start with rapid movement
     
-    // Regex for G-code commands
-    QRegularExpression reCommand("([GM])\\s*(\\d+)(?:\\.\\d+)?");
-    QRegularExpression reCoord("([XYZIJKFRS])\\s*(-?\\d*\\.?\\d+)");
-    
-    // Reset bounds
+    // Initialize bounds with first point
     minBounds = QVector3D(0, 0, 0);
-    maxBounds = QVector3D(100, 100, 0);
+    maxBounds = QVector3D(0, 0, 0);
+    bool boundsInitialized = false;
     
     // Add initial position
     GCodePoint startPoint;
@@ -434,68 +450,58 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
     
     // Process each line
     const QStringList lines = gcode.split(QRegularExpression("[\r\n]"), Qt::SkipEmptyParts);
+    
     for (const QString &line : lines) {
-        // Skip comments
-        if (line.trimmed().startsWith(';') || line.trimmed().isEmpty()) {
+        QString trimmedLine = line.trimmed();
+        
+        // Skip empty lines and comments
+        if (trimmedLine.isEmpty() || trimmedLine.startsWith(';')) {
             continue;
         }
         
-        QString processedLine = line;
-        // Remove comments in parentheses and after semicolons
-        int commentStart = processedLine.indexOf(';');
-        if (commentStart >= 0) {
-            processedLine = processedLine.left(commentStart);
+        // Remove comments
+        int commentIdx = trimmedLine.indexOf(';');
+        if (commentIdx >= 0) {
+            trimmedLine = trimmedLine.left(commentIdx).trimmed();
         }
         
-        commentStart = processedLine.indexOf('(');
-        if (commentStart >= 0) {
-            int commentEnd = processedLine.indexOf(')', commentStart);
-            if (commentEnd >= 0) {
-                processedLine.remove(commentStart, commentEnd - commentStart + 1);
-            }
+        // Skip if line is now empty
+        if (trimmedLine.isEmpty()) {
+            continue;
         }
         
-        // Extract commands
-        QRegularExpressionMatchIterator matchCommand = reCommand.globalMatch(processedLine);
-        while (matchCommand.hasNext()) {
-            QRegularExpressionMatch match = matchCommand.next();
-            QString type = match.captured(1);
-            int code = match.captured(2).toInt();
-            
-            if (type == "G") {
-                switch (code) {
-                    case 0: // Rapid move
-                        isRapid = true;
-                        break;
-                    case 1: // Linear move
-                    case 2: // CW arc (simplified as linear for now)
-                    case 3: // CCW arc (simplified as linear for now)
-                        isRapid = false;
-                        break;
-                    case 20: // Inch units
-                        isMetric = false;
-                        break;
-                    case 21: // Millimeter units
-                        isMetric = true;
-                        break;
-                    case 90: // Absolute coordinates
-                        isAbsolute = true;
-                        break;
-                    case 91: // Relative coordinates
-                        isAbsolute = false;
-                        break;
-                }
-            }
+        // Check for G-commands first
+        if (trimmedLine.contains(QRegularExpression("G0[\\s]", QRegularExpression::CaseInsensitiveOption)) || 
+            trimmedLine.contains(QRegularExpression("G00[\\s]", QRegularExpression::CaseInsensitiveOption))) {
+            isRapid = true;
+        }
+        else if (trimmedLine.contains(QRegularExpression("G1[\\s]", QRegularExpression::CaseInsensitiveOption)) || 
+                 trimmedLine.contains(QRegularExpression("G01[\\s]", QRegularExpression::CaseInsensitiveOption))) {
+            isRapid = false;
+        }
+        else if (trimmedLine.contains(QRegularExpression("G20[\\s]", QRegularExpression::CaseInsensitiveOption))) {
+            isMetric = false;  // Inch mode
+        }
+        else if (trimmedLine.contains(QRegularExpression("G21[\\s]", QRegularExpression::CaseInsensitiveOption))) {
+            isMetric = true;   // Metric mode
+        }
+        else if (trimmedLine.contains(QRegularExpression("G90[\\s]", QRegularExpression::CaseInsensitiveOption))) {
+            isAbsolute = true;  // Absolute positioning
+        }
+        else if (trimmedLine.contains(QRegularExpression("G91[\\s]", QRegularExpression::CaseInsensitiveOption))) {
+            isAbsolute = false; // Relative positioning
         }
         
-        // Extract coordinates
+        // Check for X, Y, Z coordinates
         QVector3D newPos = currentPos;
-        bool hasPosition = false;
+        bool hasMovement = false;
         
-        QRegularExpressionMatchIterator matchCoord = reCoord.globalMatch(processedLine);
-        while (matchCoord.hasNext()) {
-            QRegularExpressionMatch match = matchCoord.next();
-            QString axis = match.captured(1);
+        QRegularExpression coordPattern("([XYZ])\\s*(-?\\d*\\.?\\d+)");
+        QRegularExpressionMatchIterator coordMatches = coordPattern.globalMatch(trimmedLine);
+        
+        while (coordMatches.hasNext()) {
+            QRegularExpressionMatch match = coordMatches.next();
+            QString axis = match.captured(1).toUpper();
             float value = match.captured(2).toFloat();
             
             // Convert inches to mm if needed
@@ -505,39 +511,62 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
             
             if (axis == "X") {
                 newPos.setX(isAbsolute ? value : currentPos.x() + value);
-                hasPosition = true;
-            } else if (axis == "Y") {
+                hasMovement = true;
+            } 
+            else if (axis == "Y") {
                 newPos.setY(isAbsolute ? value : currentPos.y() + value);
-                hasPosition = true;
-            } else if (axis == "Z") {
+                hasMovement = true;
+            } 
+            else if (axis == "Z") {
                 newPos.setZ(isAbsolute ? value : currentPos.z() + value);
-                hasPosition = true;
+                hasMovement = true;
             }
         }
         
-        // Add new position to tool path if there's a position command
-        if (hasPosition && (newPos != currentPos)) {
+        // If we have movement coordinates, add to the tool path
+        if (hasMovement) {
             GCodePoint point;
             point.position = newPos;
             point.isRapid = isRapid;
             toolPath.push_back(point);
             
             // Update bounds
-            minBounds.setX(std::min(minBounds.x(), newPos.x()));
-            minBounds.setY(std::min(minBounds.y(), newPos.y()));
-            minBounds.setZ(std::min(minBounds.z(), newPos.z()));
+            if (!boundsInitialized) {
+                minBounds = newPos;
+                maxBounds = newPos;
+                boundsInitialized = true;
+            } else {
+                // Update mins
+                minBounds.setX(std::min(minBounds.x(), newPos.x()));
+                minBounds.setY(std::min(minBounds.y(), newPos.y()));
+                minBounds.setZ(std::min(minBounds.z(), newPos.z()));
+                
+                // Update maxes
+                maxBounds.setX(std::max(maxBounds.x(), newPos.x()));
+                maxBounds.setY(std::max(maxBounds.y(), newPos.y()));
+                maxBounds.setZ(std::max(maxBounds.z(), newPos.z()));
+            }
             
-            maxBounds.setX(std::max(maxBounds.x(), newPos.x()));
-            maxBounds.setY(std::max(maxBounds.y(), newPos.y()));
-            maxBounds.setZ(std::max(maxBounds.z(), newPos.z()));
-            
+            // Update current position
             currentPos = newPos;
         }
     }
     
-    // Ensure we have some bounds
-    if (minBounds == maxBounds) {
+    // Ensure we have some bounds (add padding)
+    if (!boundsInitialized) {
         minBounds = QVector3D(-10, -10, -10);
         maxBounds = QVector3D(10, 10, 10);
+    } else {
+        // Add a small padding around the model
+        QVector3D padding = (maxBounds - minBounds) * 0.1f;
+        if (padding.length() < 5.0f) {
+            padding = QVector3D(5.0f, 5.0f, 5.0f);
+        }
+        minBounds -= padding;
+        maxBounds += padding;
     }
+    
+    qDebug() << "GCode parsed. Points: " << toolPath.size() 
+             << " Min bounds: " << minBounds 
+             << " Max bounds: " << maxBounds;
 }
