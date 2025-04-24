@@ -47,6 +47,7 @@ private:
     void drawToolPath();
     void parseGCode(const QString &gcode);
     void updatePathVertices();
+    void autoScaleToFit();
     
     QOpenGLShaderProgram gridProgram;
     QOpenGLShaderProgram pathProgram;
@@ -73,6 +74,8 @@ private:
     QVector3D maxBounds;
     
     bool pathNeedsUpdate;
+    bool autoScaleEnabled;  // Controls whether auto-scaling is enabled
+    bool hasValidToolPath;  // Flag to track if we have valid toolpath data
     QTimer *updateTimer;
 };
 

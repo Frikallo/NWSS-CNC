@@ -7,12 +7,14 @@ GCodeViewer3D::GCodeViewer3D(QWidget *parent)
     : QOpenGLWidget(parent),
       gridVbo(QOpenGLBuffer::VertexBuffer),
       pathVbo(QOpenGLBuffer::VertexBuffer),
-      rotationX(45.0f),
-      rotationY(45.0f),
-      scale(1.0f),
-      minBounds(0.0f, 0.0f, 0.0f),
-      maxBounds(100.0f, 100.0f, 100.0f),
-      pathNeedsUpdate(false)
+      rotationX(0.0f),
+      rotationY(0.0f),
+      scale(0.5f),
+      minBounds(-50.0f, -50.0f, -50.0f),
+      maxBounds(50.0f, 50.0f, 50.0f),
+      pathNeedsUpdate(false),
+      autoScaleEnabled(true),
+      hasValidToolPath(false)
 {
     setFocusPolicy(Qt::StrongFocus);
     
@@ -22,6 +24,9 @@ GCodeViewer3D::GCodeViewer3D(QWidget *parent)
     connect(updateTimer, &QTimer::timeout, [this]() {
         if (pathNeedsUpdate) {
             updatePathVertices();
+            if (autoScaleEnabled && hasValidToolPath) {
+                autoScaleToFit();
+            }
             update();
             pathNeedsUpdate = false;
         }
@@ -72,24 +77,12 @@ void GCodeViewer3D::initializeGL()
     
     model.setToIdentity();
     
-    // Set up default tool path for testing
+    // Empty tool path for initial display
     toolPath.clear();
-    GCodePoint p;
-    p.position = QVector3D(0, 0, 0);
-    p.isRapid = true;
-    toolPath.push_back(p);
-    p.position = QVector3D(50, 0, 0);
-    p.isRapid = true;
-    toolPath.push_back(p);
-    p.position = QVector3D(50, 50, 0);
-    p.isRapid = false;
-    toolPath.push_back(p);
-    p.position = QVector3D(0, 50, 0);
-    p.isRapid = false;
-    toolPath.push_back(p);
-    p.position = QVector3D(0, 0, 0);
-    p.isRapid = false;
-    toolPath.push_back(p);
+    hasValidToolPath = false;
+    
+    // Fixed scale for empty view
+    scale = 1.0f;
     
     updatePathVertices();
 }
@@ -195,6 +188,11 @@ void GCodeViewer3D::resizeGL(int width, int height)
     // Update projection matrix
     projection.setToIdentity();
     projection.perspective(45.0f, aspectRatio, 0.1f, 1000.0f);
+    
+    // Re-fit the model to the new view size if appropriate
+    if (autoScaleEnabled && hasValidToolPath) {
+        autoScaleToFit();
+    }
 }
 
 void GCodeViewer3D::paintGL()
@@ -207,11 +205,13 @@ void GCodeViewer3D::paintGL()
     view.rotate(rotationY, 0.0f, 1.0f, 0.0f);
     
     model.setToIdentity();
-
-    qDebug() << rotationX << rotationY << scale;
     
     drawGrid();
-    drawToolPath();
+    
+    // Only draw tool path if it exists
+    if (hasValidToolPath) {
+        drawToolPath();
+    }
 }
 
 void GCodeViewer3D::drawGrid()
@@ -226,17 +226,34 @@ void GCodeViewer3D::drawGrid()
     
     gridVao.bind();
     
-    // Create grid data dynamically based on tool path bounds
-    float size = std::max({
-        std::abs(maxBounds.x() - minBounds.x()),
-        std::abs(maxBounds.y() - minBounds.y()),
-        std::abs(maxBounds.z() - minBounds.z())
-    }) * 1.5f;
+    // Calculate grid size based on model bounds but ensure it's always a "nice" number
+    float gridSize;
+    float step;
     
-    size = std::max(size, 100.0f); // Ensure minimum grid size
+    if (hasValidToolPath) {
+        // Calculate grid based on model size when there's a valid model
+        float modelSize = std::max({
+            std::abs(maxBounds.x() - minBounds.x()),
+            std::abs(maxBounds.y() - minBounds.y()),
+            std::abs(maxBounds.z() - minBounds.z())
+        });
+        
+        // Ensure minimum grid size and round up to next multiple of 100
+        gridSize = std::max(modelSize * 1.5f, 100.0f);
+        gridSize = std::ceil(gridSize / 100.0f) * 100.0f;
+        
+        // Calculate grid line spacing (ensure it's a power of 10)
+        step = 10.0f;
+        while (step * 20 < gridSize) {
+            step *= 10.0f;
+        }
+    } else {
+        // For empty view, use a simple 5x5 grid with 10mm spacing
+        gridSize = 100.0f; // 50mm in each direction
+        step = 10.0f;      // 10mm between grid lines
+    }
     
-    float step = std::max(size / 20.0f, 10.0f); // Grid line spacing
-    float halfSize = size / 2.0f;
+    float halfSize = gridSize / 2.0f;
     
     std::vector<float> gridVertices;
     
@@ -262,21 +279,30 @@ void GCodeViewer3D::drawGrid()
     gridVertices.push_back(0.0f); gridVertices.push_back(0.0f); gridVertices.push_back(1.0f);
     
     // Grid lines (light gray)
-    for (float i = -halfSize; i <= halfSize; i += step) {
-        if (std::abs(i) < 0.001f) continue; // Skip center lines (already drawn as axes)
+    // Ensure we draw complete grid lines at even spacing
+    int lineCount = static_cast<int>(gridSize / step);
+    if (lineCount % 2 == 0) {
+        lineCount++; // Ensure odd number of lines for symmetry
+    }
+    
+    float start = -(static_cast<float>(lineCount) / 2) * step;
+    for (int i = 0; i < lineCount; i++) {
+        float pos = start + i * step;
+        
+        if (std::abs(pos) < 0.001f) continue; // Skip center lines (already drawn as axes)
         
         // Lines parallel to X-axis
-        gridVertices.push_back(-halfSize); gridVertices.push_back(i); gridVertices.push_back(0);
+        gridVertices.push_back(-halfSize); gridVertices.push_back(pos); gridVertices.push_back(0);
         gridVertices.push_back(0.3f); gridVertices.push_back(0.3f); gridVertices.push_back(0.3f);
         
-        gridVertices.push_back(halfSize); gridVertices.push_back(i); gridVertices.push_back(0);
+        gridVertices.push_back(halfSize); gridVertices.push_back(pos); gridVertices.push_back(0);
         gridVertices.push_back(0.3f); gridVertices.push_back(0.3f); gridVertices.push_back(0.3f);
         
         // Lines parallel to Y-axis
-        gridVertices.push_back(i); gridVertices.push_back(-halfSize); gridVertices.push_back(0);
+        gridVertices.push_back(pos); gridVertices.push_back(-halfSize); gridVertices.push_back(0);
         gridVertices.push_back(0.3f); gridVertices.push_back(0.3f); gridVertices.push_back(0.3f);
         
-        gridVertices.push_back(i); gridVertices.push_back(halfSize); gridVertices.push_back(0);
+        gridVertices.push_back(pos); gridVertices.push_back(halfSize); gridVertices.push_back(0);
         gridVertices.push_back(0.3f); gridVertices.push_back(0.3f); gridVertices.push_back(0.3f);
     }
     
@@ -421,15 +447,73 @@ void GCodeViewer3D::wheelEvent(QWheelEvent *event)
 
 void GCodeViewer3D::processGCode(const QString &gcode)
 {
+    // Check if the GCode is empty
+    if (gcode.trimmed().isEmpty()) {
+        // If empty, just show the grid with no tool path
+        toolPath.clear();
+        hasValidToolPath = false;
+        
+        // Reset to default view
+        rotationX = 0.0f;
+        rotationY = 0.0f;
+        scale = 0.5f;
+        
+        update();
+        return;
+    }
+    
+    // Process normal GCode
     parseGCode(gcode);
     pathNeedsUpdate = true;
     updateTimer->start(100); // Wait a bit before updating to avoid multiple updates when editing
+}
+
+void GCodeViewer3D::autoScaleToFit()
+{
+    if (toolPath.empty() || !hasValidToolPath) {
+        return;
+    }
+    
+    // Calculate model dimensions
+    QVector3D modelDimensions = maxBounds - minBounds;
+    
+    // Avoid division by zero
+    if (modelDimensions.length() < 0.001f) {
+        scale = 1.0f;
+        return;
+    }
+    
+    // Calculate diagonal length of model
+    float diagonal = modelDimensions.length();
+    
+    // Calculate scale factor to fit model in view (with 20% margin)
+    // The magic number 250.0f is based on perspective settings
+    float targetScale = 250.0f / diagonal;
+    
+    // Add 20% margin
+    targetScale *= 0.5f;
+    
+    // Limit scale to reasonable bounds
+    if (targetScale < 0.1f) targetScale = 0.1f;
+    if (targetScale > 10.0f) targetScale = 10.0f;
+    
+    // Apply new scale
+    scale = targetScale;
+    
+    qDebug() << "Auto-scaled to fit. Model size:" << diagonal << "New scale:" << scale;
+    
+    // Reset view rotation for initial view
+    rotationX = 0.0f;
+    rotationY = 0.0f;
+    
+    update();
 }
 
 void GCodeViewer3D::parseGCode(const QString &gcode)
 {
     // Clear existing tool path
     toolPath.clear();
+    hasValidToolPath = false;
     
     // Initialize position and state
     QVector3D currentPos(0, 0, 0);
@@ -529,6 +613,7 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
             point.position = newPos;
             point.isRapid = isRapid;
             toolPath.push_back(point);
+            hasValidToolPath = true;
             
             // Update bounds
             if (!boundsInitialized) {
@@ -552,11 +637,8 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
         }
     }
     
-    // Ensure we have some bounds (add padding)
-    if (!boundsInitialized) {
-        minBounds = QVector3D(-10, -10, -10);
-        maxBounds = QVector3D(10, 10, 10);
-    } else {
+    // If we have a valid tool path, ensure we have some bounds and add padding
+    if (hasValidToolPath && boundsInitialized) {
         // Add a small padding around the model
         QVector3D padding = (maxBounds - minBounds) * 0.1f;
         if (padding.length() < 5.0f) {
@@ -564,9 +646,13 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
         }
         minBounds -= padding;
         maxBounds += padding;
+        
+        qDebug() << "GCode parsed. Points: " << toolPath.size() 
+                 << " Min bounds: " << minBounds 
+                 << " Max bounds: " << maxBounds;
+    } else {
+        // If no valid path was found, clear the tool path
+        toolPath.clear();
+        hasValidToolPath = false;
     }
-    
-    qDebug() << "GCode parsed. Points: " << toolPath.size() 
-             << " Min bounds: " << minBounds 
-             << " Max bounds: " << maxBounds;
 }

@@ -21,8 +21,9 @@ MainWindow::MainWindow(QWidget *parent)
     mainSplitter = new QSplitter(Qt::Horizontal, this);
     mainSplitter->addWidget(gCodeEditor);
     mainSplitter->addWidget(gCodeViewer);
-    mainSplitter->setStretchFactor(0, 1);
-    mainSplitter->setStretchFactor(1, 1);
+    
+    // Make sure both widgets start with equal width
+    // We'll use a QTimer to defer this until after the window is shown
     setCentralWidget(mainSplitter);
 
     // Set up UI elements
@@ -44,6 +45,14 @@ MainWindow::MainWindow(QWidget *parent)
     
     // Delay initial refresh to allow UI to be fully constructed
     QTimer::singleShot(100, this, &MainWindow::updateGCodePreview);
+    
+    // Use a timer to set the split after the window is shown and sized
+    QTimer::singleShot(0, this, [this]() {
+        QList<int> sizes;
+        int halfWidth = width() / 2;
+        sizes << halfWidth << halfWidth;
+        mainSplitter->setSizes(sizes);
+    });
 }
 
 MainWindow::~MainWindow()
