@@ -1,3 +1,4 @@
+// mainwindow.h (updated)
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
@@ -8,8 +9,14 @@
 #include <QToolBar>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QTabWidget>
+#include <QDockWidget>
+#include <QStackedWidget>
 #include "gcodeeditor.h"
 #include "gcodeviewer3d.h"
+#include "svgviewer.h"
+#include "gcodeoptionspanel.h"
+#include "svgtogcode.h"
 
 class MainWindow : public QMainWindow
 {
@@ -27,12 +34,16 @@ private slots:
     void about();
     void documentWasModified();
     void updateGCodePreview();
-    void handleSplitterMoved(int pos, int index);
+    void showWelcomeDialog();
+    void importSvgFile();
+    void convertSvgToGCode(const QString &svgFile);
+    void onTabChanged(int index);
 
 private:
     void createActions();
     void createMenus();
     void createToolBars();
+    void createDockPanels();
     void createStatusBar();
     void readSettings();
     void writeSettings();
@@ -41,32 +52,44 @@ private:
     bool saveFile(const QString &fileName);
     void setCurrentFile(const QString &fileName);
     QString strippedName(const QString &fullFileName);
+    void setupTabWidget();
 
     QString currentFile;
     bool isUntitled;
 
-    QSplitter *mainSplitter;
+    QTabWidget *tabWidget;
+    GCodeOptionsPanel *gcodeOptionsPanel;
     GCodeEditor *gCodeEditor;
     GCodeViewer3D *gCodeViewer;
+    SVGViewer *svgViewer;
+    SvgToGCode *svgToGCode;
+
+    QDockWidget *machineDock;
+    QDockWidget *gcodeOptionsDock;
 
     QMenu *fileMenu;
     QMenu *editMenu;
     QMenu *viewMenu;
+    QMenu *toolsMenu;
     QMenu *helpMenu;
 
     QToolBar *fileToolBar;
     QToolBar *editToolBar;
+    QToolBar *viewToolBar;
 
     QAction *newAct;
     QAction *openAct;
     QAction *saveAct;
     QAction *saveAsAct;
+    QAction *importSvgAct;
     QAction *exitAct;
     QAction *cutAct;
     QAction *copyAct;
     QAction *pasteAct;
     QAction *aboutAct;
     QAction *aboutQtAct;
+    QAction *showMachinePanelAct;
+    QAction *showGCodeOptionsPanelAct;
 };
 
 #endif // MAINWINDOW_H

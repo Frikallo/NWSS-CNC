@@ -9,7 +9,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # Find required packages
-find_package(Qt6 COMPONENTS Core Gui Widgets OpenGLWidgets REQUIRED)
+find_package(Qt6 COMPONENTS Core Gui Widgets OpenGLWidgets Svg SvgWidgets SerialPort REQUIRED)
 
 # Source files
 set(SOURCES
@@ -17,6 +17,9 @@ set(SOURCES
     src/mainwindow.cpp
     src/gcodeeditor.cpp
     src/gcodeviewer3d.cpp
+    src/svgviewer.cpp
+    src/gcodeoptionspanel.cpp
+    src/svgtogcode.cpp
 )
 
 # Header files
@@ -24,6 +27,9 @@ set(HEADERS
     src/mainwindow.h
     src/gcodeeditor.h
     src/gcodeviewer3d.h
+    src/svgviewer.h
+    src/gcodeoptionspanel.h
+    src/svgtogcode.h
 )
 
 # UI files
@@ -40,6 +46,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Gui
     Qt6::Widgets
     Qt6::OpenGLWidgets
+    Qt6::Svg
+    Qt6::SvgWidgets
+    Qt6::SerialPort
 )
 
 # Include directories
