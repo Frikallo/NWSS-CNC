@@ -503,10 +503,19 @@ void GCodeViewer3D::autoScaleToFit()
     
     qDebug() << "Auto-scaled to fit. Model size:" << diagonal << "New scale:" << scale;
     
-    // Reset view rotation for initial view
-    rotationX = 30.0f;  // Give a slightly angled view for better 3D perspective
-    rotationY = -45.0f;
+    update();
+}
+
+void GCodeViewer3D::handleResize()
+{
+    // Update the projection matrix based on the new size
+    float aspectRatio = static_cast<float>(width()) / static_cast<float>(height() ? height() : 1);
     
+    // Update projection matrix without changing other view parameters
+    projection.setToIdentity();
+    projection.perspective(45.0f, aspectRatio, 0.1f, 1000.0f);
+    
+    // Only update the display, don't change any view parameters
     update();
 }
 

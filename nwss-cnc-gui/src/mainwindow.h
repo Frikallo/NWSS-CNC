@@ -27,6 +27,7 @@ private slots:
     void about();
     void documentWasModified();
     void updateGCodePreview();
+    void handleSplitterMoved(int pos, int index);
 
 private:
     void createActions();

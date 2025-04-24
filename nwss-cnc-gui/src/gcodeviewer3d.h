@@ -30,6 +30,7 @@ public:
     ~GCodeViewer3D();
 
     void processGCode(const QString &gcode);
+    void handleResize();
 
 protected:
     void initializeGL() override;

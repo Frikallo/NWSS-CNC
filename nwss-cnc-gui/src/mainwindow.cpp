@@ -38,6 +38,8 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::documentWasModified);
     connect(gCodeEditor, &GCodeEditor::textChanged,
             this, &MainWindow::updateGCodePreview);
+    connect(mainSplitter, &QSplitter::splitterMoved,
+        this, &MainWindow::handleSplitterMoved);
 
     // Initial state
     setCurrentFile("");
@@ -292,6 +294,14 @@ void MainWindow::updateGCodePreview()
     // Parse GCode and update the 3D viewer
     QString gcode = gCodeEditor->toPlainText();
     gCodeViewer->processGCode(gcode);
+}
+
+void MainWindow::handleSplitterMoved(int pos, int index)
+{
+    // Tell the viewer to update its projection without changing orientation
+    if (gCodeViewer) {
+        gCodeViewer->handleResize();
+    }
 }
 
 void MainWindow::about()
