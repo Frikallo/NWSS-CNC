@@ -28,18 +28,18 @@ jobs:
       
       - name: Create build directory
         run: cd nwss-cnc && mkdir build
-      
+
       - name: Configure CMake
-        working-directory: ./build
+        working-directory: ./nwss-cnc/build
         run: |
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
-      
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$Qt6_DIR"
+
       - name: Build application
-        working-directory: ./build
+        working-directory: ./nwss-cnc/build
         run: cmake --build . --config Release
-      
+
       - name: Package application
-        working-directory: ./build
+        working-directory: ./nwss-cnc/build
         run: cmake --build . --target package_for_github
       
       - name: Upload artifacts
@@ -69,18 +69,18 @@ jobs:
 
       - name: Create build directory
         run: cd nwss-cnc && mkdir build
-      
+
       - name: Configure CMake
-        working-directory: ./build
+        working-directory: ./nwss-cnc/build
         run: |
           cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$Qt6_DIR"
-      
+
       - name: Build application
-        working-directory: ./build
+        working-directory: ./nwss-cnc/build
         run: cmake --build . --config Release
-      
+
       - name: Package application
-        working-directory: ./build
+        working-directory: ./nwss-cnc/build
         run: cmake --build . --target package_for_github
       
       - name: Upload artifacts
