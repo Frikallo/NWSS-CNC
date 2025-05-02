@@ -12,7 +12,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # Application metadata
-set(APP_NAME "NWSS CNC")
+set(APP_NAME "NWSS-CNC")
 set(APP_BUNDLE_IDENTIFIER "org.nwss.cnc")
 set(APP_VERSION ${PROJECT_VERSION})
 set(APP_COMPANY "NWSS")
