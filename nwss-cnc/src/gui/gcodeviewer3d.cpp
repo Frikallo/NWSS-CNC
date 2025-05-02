@@ -21,7 +21,17 @@ GCodeViewer3D::GCodeViewer3D(QWidget *parent)
       m_isAnimating(false),
       m_animationProgress(0.0f),
       m_animationDuration(0.5f), // 500ms animation
-      m_rotationCenter(0.0f, 0.0f, 0.0f) // Set rotation center to origin
+      m_rotationCenter(0.0f, 0.0f, 0.0f),
+      pathIndexBuffer(QOpenGLBuffer::IndexBuffer),
+      useIndexedRendering(true),
+      m_rapidIndexCount(0),
+      m_cuttingIndexCount(0),
+      m_rapidIndexOffset(0),
+      m_cuttingIndexOffset(0),
+      m_useSimplifiedGeometry(true),
+      m_simplificationFactor(1),
+      m_lastScale(1.0f),
+      m_pathGeometryNeedsRebuilding(false)
 {
     setFocusPolicy(Qt::StrongFocus);
     
@@ -54,6 +64,7 @@ GCodeViewer3D::~GCodeViewer3D()
     makeCurrent();
     gridVbo.destroy();
     pathVbo.destroy();
+    pathIndexBuffer.destroy();
     gridVao.destroy();
     pathVao.destroy();
     doneCurrent();
@@ -76,14 +87,20 @@ void GCodeViewer3D::initializeGL()
     gridVao.bind();
     gridVbo.create();
     gridVbo.bind();
-    gridVbo.allocate(nullptr, 4096 * sizeof(float)); // Allocate more space for grid lines
+    gridVbo.allocate(nullptr, 4096 * sizeof(float)); // Allocate space for grid lines
     gridVao.release();
     
     pathVao.create();
     pathVao.bind();
     pathVbo.create();
     pathVbo.bind();
-    pathVbo.allocate(nullptr, 1024 * sizeof(float)); // Initial allocation, will resize as needed
+    pathVbo.allocate(nullptr, 1024 * sizeof(float)); // Initial allocation
+    
+    // Create index buffer for optimized rendering
+    pathIndexBuffer.create();
+    pathIndexBuffer.bind();
+    pathIndexBuffer.allocate(nullptr, 1024 * sizeof(int)); // Initial allocation
+    
     pathVao.release();
     
     // Initialize matrices
@@ -98,6 +115,9 @@ void GCodeViewer3D::initializeGL()
     
     // Fixed scale for empty view
     scale = 1.0f;
+    
+    // Make sure the view cube is visible
+    m_cubeViewVisible = true;
     
     // Initialize view cube
     initViewCube();
@@ -1094,12 +1114,129 @@ void GCodeViewer3D::drawGrid()
 
 void GCodeViewer3D::updatePathVertices()
 {
-    // Just mark that the vertices need to be updated
-    // The actual update will happen in makePathVertices
+    // Mark that the vertices need to be updated
     pathNeedsUpdate = true;
+    m_pathGeometryNeedsRebuilding = true;
+    
     if (!updateTimer->isActive()) {
-        updateTimer->start(100);
+        updateTimer->start(50); // Reduced from 100ms for responsiveness
     }
+}
+
+void GCodeViewer3D::rebuildGeometryForCurrentLOD()
+{
+    if (toolPath.empty() || !hasValidToolPath) {
+        m_simplifiedToolPath.clear();
+        m_indicesRapid.clear();
+        m_indicesCutting.clear();
+        return;
+    }
+    
+    // Decide LOD based on scale
+    m_simplificationFactor = 1; // Default: use all points
+    
+    // Adapt LOD based on current scale and point count
+    if (m_useSimplifiedGeometry && toolPath.size() > 1000) {
+        if (scale < 0.1f) {
+            m_simplificationFactor = std::min(50, static_cast<int>(toolPath.size() / 1000));
+        } else if (scale < 0.3f) {
+            m_simplificationFactor = std::min(20, static_cast<int>(toolPath.size() / 2000));
+        } else if (scale < 0.5f) {
+            m_simplificationFactor = std::min(10, static_cast<int>(toolPath.size() / 5000));
+        } else if (scale < 0.8f) {
+            m_simplificationFactor = std::min(5, static_cast<int>(toolPath.size() / 10000));
+        } else {
+            m_simplificationFactor = 1;
+        }
+    }
+    
+    qDebug() << "LOD Simplification factor:" << m_simplificationFactor << "Scale:" << scale;
+    
+    // Create simplified path using LOD
+    m_simplifiedToolPath.clear();
+    m_simplifiedToolPath.reserve(toolPath.size() / m_simplificationFactor + 1);
+    
+    // Always include first and last points
+    m_simplifiedToolPath.push_back(toolPath.front());
+    
+    // Apply Douglas-Peucker-like simplification for large models
+    if (toolPath.size() > 10000 && m_simplificationFactor > 1) {
+        // Simplified approach: keep important points (direction changes)
+        float epsilon = 0.5f * m_simplificationFactor; // Tolerance increases with simplification
+        
+        for (size_t i = 1; i < toolPath.size() - 1; i++) {
+            bool isKeyPoint = false;
+            
+            // Always include points where the movement type changes
+            if (toolPath[i].isRapid != toolPath[i-1].isRapid) {
+                isKeyPoint = true;
+            } 
+            // Always include significant direction changes
+            else {
+                QVector3D v1 = (toolPath[i].position - toolPath[i-1].position).normalized();
+                QVector3D v2 = (toolPath[i+1].position - toolPath[i].position).normalized();
+                float dot = QVector3D::dotProduct(v1, v2);
+                
+                // If direction change is significant
+                if (dot < 0.95f) {
+                    isKeyPoint = true;
+                }
+            }
+            
+            // Include point if it's a key point or based on simplification factor
+            if (isKeyPoint || i % m_simplificationFactor == 0) {
+                m_simplifiedToolPath.push_back(toolPath[i]);
+            }
+        }
+    } else {
+        // Simple uniform sampling for smaller models
+        for (size_t i = 1; i < toolPath.size() - 1; i += m_simplificationFactor) {
+            m_simplifiedToolPath.push_back(toolPath[i]);
+        }
+    }
+    
+    // Always add the last point to ensure the path is complete
+    if (m_simplifiedToolPath.back().position != toolPath.back().position) {
+        m_simplifiedToolPath.push_back(toolPath.back());
+    }
+    
+    qDebug() << "Simplified from" << toolPath.size() << "to" << m_simplifiedToolPath.size() << "points";
+    
+    // Now create separate index arrays for rapid and cutting moves
+    m_indicesRapid.clear();
+    m_indicesCutting.clear();
+    
+    // Reserve reasonable space (each point will be part of at most one line segment)
+    m_indicesRapid.reserve(m_simplifiedToolPath.size() * 2);
+    m_indicesCutting.reserve(m_simplifiedToolPath.size() * 2);
+    
+    // Create indices for line segments, separating by movement type
+    for (size_t i = 0; i < m_simplifiedToolPath.size() - 1; i++) {
+        const auto& current = m_simplifiedToolPath[i];
+        const auto& next = m_simplifiedToolPath[i + 1];
+        
+        // Only connect points if they have the same movement type
+        if (current.isRapid && next.isRapid) {
+            m_indicesRapid.push_back(i);
+            m_indicesRapid.push_back(i + 1);
+        } else if (!current.isRapid && !next.isRapid) {
+            m_indicesCutting.push_back(i);
+            m_indicesCutting.push_back(i + 1);
+        }
+    }
+    
+    // Store counts for rendering
+    m_rapidIndexCount = m_indicesRapid.size();
+    m_cuttingIndexCount = m_indicesCutting.size();
+    m_rapidIndexOffset = 0;
+    m_cuttingIndexOffset = m_rapidIndexCount * sizeof(int);
+    
+    qDebug() << "Created" << m_rapidIndexCount/2 << "rapid segments and" 
+             << m_cuttingIndexCount/2 << "cutting segments";
+    
+    // Remember the scale we built this for
+    m_lastScale = scale;
+    m_pathGeometryNeedsRebuilding = false;
 }
 
 void GCodeViewer3D::makePathVertices()
@@ -1115,47 +1252,36 @@ void GCodeViewer3D::makePathVertices()
         return;
     }
     
-    // Reset our data structures
-    pathVertices.clear();
-    m_pathSegments.clear();
+    // First check if we need to rebuild the geometry based on LOD
+    bool needRebuildLOD = false;
     
-    // Count how many rapid vs cutting moves we have (for debugging)
-    int rapidMoveCount = 0;
-    int cuttingMoveCount = 0;
-    
-    // For tracking segments
-    int currentSegmentStart = 0;
-    bool isCurrentRapid = toolPath[0].isRapid;
-    int pointCount = 0;
-    
-    // Process all points and create segments where movement type changes
-    for (size_t i = 0; i < toolPath.size(); i++) {
-        const auto &point = toolPath[i];
-        
-        // If movement type changed, end current segment and start a new one
-        if (i > 0 && point.isRapid != isCurrentRapid) {
-            // End the current segment
-            m_pathSegments.push_back(currentSegmentStart);
-            m_pathSegments.push_back(pointCount);
-            
-            // Update counters based on segment type
-            if (isCurrentRapid) {
-                rapidMoveCount++;
-            } else {
-                cuttingMoveCount++;
-            }
-            
-            // Start a new segment
-            currentSegmentStart = pointCount;
-            isCurrentRapid = point.isRapid;
+    // If scale changed significantly, rebuild LOD
+    if (m_lastScale != scale) {
+        float ratio = scale / m_lastScale;
+        if (ratio < 0.8f || ratio > 1.25f) {
+            needRebuildLOD = true;
         }
-        
-        // Add the point to our vertex array
+    }
+    
+    // If geometry is marked for rebuilding or LOD needs update
+    if (m_pathGeometryNeedsRebuilding || needRebuildLOD) {
+        rebuildGeometryForCurrentLOD();
+    }
+    
+    // Reset our vertex array
+    pathVertices.clear();
+    
+    // Use the simplified path for vertices
+    pathVertices.reserve(m_simplifiedToolPath.size() * 6); // 3 pos + 3 color per vertex
+    
+    // Generate vertex data
+    for (const auto& point : m_simplifiedToolPath) {
+        // Add position
         pathVertices.push_back(point.position.x());
         pathVertices.push_back(point.position.y());
         pathVertices.push_back(point.position.z());
         
-        // Add color data
+        // Add color
         if (point.isRapid) {
             // Orange for rapid moves
             pathVertices.push_back(1.0f);
@@ -1167,56 +1293,57 @@ void GCodeViewer3D::makePathVertices()
             pathVertices.push_back(0.3f);
             pathVertices.push_back(1.0f);
         }
-        
-        pointCount++;
     }
     
-    // Add the final segment
-    if (pointCount > 0) {
-        m_pathSegments.push_back(currentSegmentStart);
-        m_pathSegments.push_back(pointCount);
-        
-        // Update counters based on final segment type
-        if (isCurrentRapid) {
-            rapidMoveCount++;
-        } else {
-            cuttingMoveCount++;
-        }
-    }
-    
-    // Debug output
-    qDebug() << "Created" << rapidMoveCount << "rapid move segments and" 
-             << cuttingMoveCount << "cutting move segments";
-    
-    // Only update GPU buffer if the context is valid
+    // Update GPU buffers
     if (isValid() && !pathVertices.empty()) {
         makeCurrent();
-        pathVao.bind();
-        pathVbo.bind();
         
-        // Make sure buffer is large enough
+        // Bind vertex array object
+        pathVao.bind();
+        
+        // Update vertex buffer
+        pathVbo.bind();
         pathVbo.allocate(pathVertices.data(), pathVertices.size() * sizeof(float));
         
-        // Update vertex attributes
+        // Set up vertex attributes
         pathProgram.bind();
         pathProgram.enableAttributeArray(0);
         pathProgram.setAttributeBuffer(0, GL_FLOAT, 0, 3, 6 * sizeof(float));
         
         pathProgram.enableAttributeArray(1);
         pathProgram.setAttributeBuffer(1, GL_FLOAT, 3 * sizeof(float), 3, 6 * sizeof(float));
-        pathProgram.release();
         
+        // Update index buffer
+        pathIndexBuffer.bind();
+        
+        // Calculate total size needed
+        int totalIndexSize = (m_rapidIndexCount + m_cuttingIndexCount) * sizeof(int);
+        
+        // Allocate buffer
+        pathIndexBuffer.allocate(totalIndexSize);
+        
+        // Upload rapid move indices
+        if (m_rapidIndexCount > 0) {
+            pathIndexBuffer.write(m_rapidIndexOffset, m_indicesRapid.data(), m_rapidIndexCount * sizeof(int));
+        }
+        
+        // Upload cutting move indices
+        if (m_cuttingIndexCount > 0) {
+            pathIndexBuffer.write(m_cuttingIndexOffset, m_indicesCutting.data(), m_cuttingIndexCount * sizeof(int));
+        }
+        
+        pathProgram.release();
         pathVao.release();
+        
         doneCurrent();
     }
-    
-    // Store the total visible points
-    m_visiblePointCount = pointCount;
 }
 
 void GCodeViewer3D::drawToolPath()
 {
-    if (toolPath.empty() || pathVertices.empty() || m_visiblePointCount == 0) {
+    if (toolPath.empty() || pathVertices.empty() || 
+        (m_rapidIndexCount == 0 && m_cuttingIndexCount == 0)) {
         return;
     }
     
@@ -1224,24 +1351,41 @@ void GCodeViewer3D::drawToolPath()
         return;
     }
     
+    // Enable line smoothing for better visual quality
+    glEnable(GL_LINE_SMOOTH);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+    
+    // Enable blending for transparent lines
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
     // Set shader uniforms
     pathProgram.setUniformValue("projection", projection);
     pathProgram.setUniformValue("view", view);
     pathProgram.setUniformValue("model", model);
     
     pathVao.bind();
+    pathIndexBuffer.bind();
     
-    // Use a separate draw call for each line segment
-    // This ensures we don't connect points that shouldn't be connected
-    glLineWidth(3.0f);
+    // Draw rapid moves (orange) with thinner lines
+    if (m_rapidIndexCount > 0) {
+        glLineWidth(2.0f); // Thinner for rapid moves
+        glDrawElements(GL_LINES, m_rapidIndexCount, GL_UNSIGNED_INT, 
+                      (const void*)(intptr_t)(m_rapidIndexOffset));
+    }
     
-    for (size_t i = 0; i < toolPath.size() - 1; i++) {
-        glLineWidth(3.0f);
-        glDrawArrays(GL_LINE_STRIP, 0, m_visiblePointCount);
+    // Draw cutting moves (blue) with thicker lines
+    if (m_cuttingIndexCount > 0) {
+        glLineWidth(3.0f); // Thicker for cutting moves
+        glDrawElements(GL_LINES, m_cuttingIndexCount, GL_UNSIGNED_INT, 
+                      (const void*)(intptr_t)(m_cuttingIndexOffset));
     }
     
     pathVao.release();
     pathProgram.release();
+    
+    // Restore GL state
+    glDisable(GL_BLEND);
 }
 
 void GCodeViewer3D::mousePressEvent(QMouseEvent *event)
@@ -1267,6 +1411,10 @@ void GCodeViewer3D::mousePressEvent(QMouseEvent *event)
 
 void GCodeViewer3D::mouseMoveEvent(QMouseEvent *event)
 {
+    // Performance optimization for large models: reduce operations during dragging
+    static QElapsedTimer dragTimer;
+    static bool isDraggingView = false;
+    
     // First check if we're hovering over the cube, regardless of drag state
     bool isOverCube = isPointInViewCube(event->pos());
     int hoveredFace = -1;
@@ -1288,19 +1436,21 @@ void GCodeViewer3D::mouseMoveEvent(QMouseEvent *event)
     // Update hover states regardless of drag state
     bool needsUpdate = false;
     
-    // Update hover state on each face
-    for (int i = 0; i < m_cubeViewFaces.size(); i++) {
-        bool shouldBeHovered = (i == hoveredFace);
-        if (m_cubeViewFaces[i].isHovered != shouldBeHovered) {
-            m_cubeViewFaces[i].isHovered = shouldBeHovered;
+    // Update hover state on each face - but only if we're not actively dragging
+    if (!m_isDraggingCube && !isDraggingView) {
+        for (int i = 0; i < m_cubeViewFaces.size(); i++) {
+            bool shouldBeHovered = (i == hoveredFace);
+            if (m_cubeViewFaces[i].isHovered != shouldBeHovered) {
+                m_cubeViewFaces[i].isHovered = shouldBeHovered;
+                needsUpdate = true;
+            }
+        }
+        
+        // Update global hover state
+        if (m_hoveredFaceId != hoveredFace) {
+            m_hoveredFaceId = hoveredFace;
             needsUpdate = true;
         }
-    }
-    
-    // Update global hover state
-    if (m_hoveredFaceId != hoveredFace) {
-        m_hoveredFaceId = hoveredFace;
-        needsUpdate = true;
     }
     
     // Now handle dragging if it's happening
@@ -1314,12 +1464,21 @@ void GCodeViewer3D::mouseMoveEvent(QMouseEvent *event)
         update();
         return;
     } else if (event->buttons() & Qt::LeftButton) {
-        // Handle regular view panning, NOT cube dragging
-        // This runs when the mouse is away from the cube
+        // Start measuring drag time if not already dragging
+        if (!isDraggingView) {
+            isDraggingView = true;
+            dragTimer.start();
+        }
         
         // Calculate mouse movement delta
         int dx = event->pos().x() - lastMousePos.x();
         int dy = event->pos().y() - lastMousePos.y();
+        
+        // Skip very small movements for better performance
+        if (abs(dx) < 2 && abs(dy) < 2) {
+            lastMousePos = event->pos();
+            return;
+        }
         
         // Calculate pan speed based on scale (slower pan when zoomed in)
         float panSpeed = 1.0f / scale;
@@ -1348,12 +1507,18 @@ void GCodeViewer3D::mouseMoveEvent(QMouseEvent *event)
         cameraTarget += movement;
         m_rotationCenter += movement; // Move the rotation center when panning
         
-        // Always update when panning
-        update();
+        // During drag - only update UI at 30fps max to reduce CPU strain
+        if (dragTimer.elapsed() > 33) { // ~30 fps
+            update();
+            dragTimer.restart();
+        }
+    } else {
+        // Reset drag state when no button is pressed
+        isDraggingView = false;
     }
     
-    // Update the view if hover states changed
-    if (needsUpdate) {
+    // Update the view if hover states changed and we're not dragging
+    if (needsUpdate && !isDraggingView) {
         update();
     }
     
@@ -1435,6 +1600,9 @@ void GCodeViewer3D::wheelEvent(QWheelEvent *event)
 {
     float delta = event->angleDelta().y() / 120.0f;
     
+    // Store previous scale for comparison
+    float oldScale = scale;
+    
     // Adjust zoom speed based on current scale
     float zoomFactor = 0.1f;
     if (scale < 0.1f) zoomFactor = 0.01f; // Finer control at extreme zoom levels
@@ -1444,6 +1612,24 @@ void GCodeViewer3D::wheelEvent(QWheelEvent *event)
     // Expanded zoom range
     if (scale < 0.001f) scale = 0.001f; // Allow much closer zoom
     if (scale > 50.0f) scale = 50.0f;   // Allow much further zoom out
+    
+    // Check if scale changed enough to warrant LOD update
+    float ratio = scale / oldScale;
+    if (ratio < 0.8f || ratio > 1.25f) {
+        // Scale changed enough to update LOD
+        if (hasValidToolPath && m_useSimplifiedGeometry) {
+            m_pathGeometryNeedsRebuilding = true;
+            
+            // If zooming out fast, update immediately
+            if (ratio < 0.7f) {
+                rebuildGeometryForCurrentLOD();
+                makePathVertices();
+            } else {
+                // Otherwise, schedule update
+                updateTimer->start(50);
+            }
+        }
+    }
     
     update();
 }
@@ -1550,130 +1736,184 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
     toolPath.clear();
     hasValidToolPath = false;
     
-    // Initialize position and state
-    QVector3D currentPos(0, 0, 0);
-    bool isMetric = true;  // G21 is default (metric)
-    bool isAbsolute = true;  // G90 is default (absolute coordinates)
-    bool isRapid = true;  // Start with rapid movement (G00)
+    // Check if the GCode is empty
+    if (gcode.trimmed().isEmpty()) {
+        // If empty, just show the grid with no tool path
+        setIsometricView();
+        scale = 0.5f;
+        pathNeedsUpdate = true;
+        updateTimer->start(100);
+        return;
+    }
     
-    // Initialize bounds with first point
-    minBounds = QVector3D(0, 0, 0);
-    maxBounds = QVector3D(0, 0, 0);
-    bool boundsInitialized = false;
-    
-    // Reserve space for efficiency - guess at a reasonable size
-    toolPath.reserve(10000);
-    
-    // Add initial position
-    GCodePoint startPoint;
-    startPoint.position = currentPos;
-    startPoint.isRapid = true;
-    toolPath.push_back(startPoint);
-    
-    // Process each line
-    const QStringList lines = gcode.split(QRegularExpression("[\r\n]"), Qt::SkipEmptyParts);
-    
-    // Pre-compile regular expressions for better performance
-    static QRegularExpression g0Regex("G0[\\s]|G00[\\s]", QRegularExpression::CaseInsensitiveOption);
-    static QRegularExpression g1Regex("G1[\\s]|G01[\\s]", QRegularExpression::CaseInsensitiveOption);
-    static QRegularExpression g20Regex("G20[\\s]", QRegularExpression::CaseInsensitiveOption);
-    static QRegularExpression g21Regex("G21[\\s]", QRegularExpression::CaseInsensitiveOption);
-    static QRegularExpression g90Regex("G90[\\s]", QRegularExpression::CaseInsensitiveOption);
-    static QRegularExpression g91Regex("G91[\\s]", QRegularExpression::CaseInsensitiveOption);
-    static QRegularExpression coordPattern("([XYZ])\\s*(-?\\d*\\.?\\d+)");
-    
-    // Debug counters
-    int g00Count = 0;
-    int g01Count = 0;
-    
-    for (const QString &line : lines) {
-        QString trimmedLine = line.trimmed();
+    // Process normal GCode safely
+    try {
+        // Pre-allocate a reasonable size to avoid constant reallocation
+        int lineCount = gcode.count('\n') + 1;
+        toolPath.reserve(lineCount * 0.5); // Assuming about 50% of lines contain movement
         
-        // Skip empty lines and comments
-        if (trimmedLine.isEmpty() || trimmedLine.startsWith(';')) {
-            continue;
-        }
+        // Initialize position and state
+        QVector3D currentPos(0, 0, 0);
+        bool isMetric = true;  // G21 is default (metric)
+        bool isAbsolute = true;  // G90 is default (absolute coordinates)
+        bool isRapid = true;  // Start with rapid movement (G00)
         
-        // Remove comments more efficiently
-        int commentIdx = trimmedLine.indexOf(';');
-        if (commentIdx >= 0) {
-            trimmedLine = trimmedLine.left(commentIdx).trimmed();
-        }
+        // Add initial position
+        GCodePoint startPoint;
+        startPoint.position = currentPos;
+        startPoint.isRapid = true;
+        toolPath.push_back(startPoint);
         
-        // Skip if line is now empty
-        if (trimmedLine.isEmpty()) {
-            continue;
-        }
+        // Initialize bounds with first point
+        minBounds = QVector3D(0, 0, 0);
+        maxBounds = QVector3D(0, 0, 0);
+        bool boundsInitialized = false;
         
-        // Check for G-commands first - CRITICAL FIX HERE
-        bool prevIsRapid = isRapid; // Remember previous state
+        // More efficient line splitting - avoids creating a QStringList with all lines
+        int pos = 0;
+        int nextLinePos;
         
-        if (trimmedLine.contains(g0Regex)) {
-            isRapid = true;
-            g00Count++;
-        }
-        else if (trimmedLine.contains(g1Regex)) {
-            isRapid = false;
-            g01Count++;
-        }
-        // Don't reset isRapid for other commands - mode stays active until changed
+        // Pre-compile regular expressions for better performance
+        static QRegularExpression g0Regex("G0[\\s]|G00[\\s]", QRegularExpression::CaseInsensitiveOption);
+        static QRegularExpression g1Regex("G1[\\s]|G01[\\s]", QRegularExpression::CaseInsensitiveOption);
+        static QRegularExpression g20Regex("G20[\\s]", QRegularExpression::CaseInsensitiveOption);
+        static QRegularExpression g21Regex("G21[\\s]", QRegularExpression::CaseInsensitiveOption);
+        static QRegularExpression g90Regex("G90[\\s]", QRegularExpression::CaseInsensitiveOption);
+        static QRegularExpression g91Regex("G91[\\s]", QRegularExpression::CaseInsensitiveOption);
+        static QRegularExpression coordPattern("([XYZ])\\s*(-?\\d*\\.?\\d+)");
         
-        // Check for other G commands (unit settings, positioning mode)
-        if (trimmedLine.contains(g20Regex)) {
-            isMetric = false;  // Inch mode
-        }
-        else if (trimmedLine.contains(g21Regex)) {
-            isMetric = true;   // Metric mode
-        }
-        else if (trimmedLine.contains(g90Regex)) {
-            isAbsolute = true;  // Absolute positioning
-        }
-        else if (trimmedLine.contains(g91Regex)) {
-            isAbsolute = false; // Relative positioning
-        }
+        // For tracking Z-axis movements
+        float lastX = 0.0f;
+        float lastY = 0.0f;
+        float lastZ = 0.0f;
+        float currentZ = 0.0f;
+        bool hasLastCoordinates = false;
         
-        // Check for X, Y, Z coordinates
-        QVector3D newPos = currentPos;
-        bool hasMovement = false;
-        
-        QRegularExpressionMatchIterator coordMatches = coordPattern.globalMatch(trimmedLine);
-        
-        while (coordMatches.hasNext()) {
-            QRegularExpressionMatch match = coordMatches.next();
-            QString axis = match.captured(1).toUpper();
-            float value = match.captured(2).toFloat();
-            
-            // Convert inches to mm if needed
-            if (!isMetric) {
-                value *= 25.4f;
+        while (pos < gcode.length()) {
+            // Find next line
+            nextLinePos = gcode.indexOf('\n', pos);
+            if (nextLinePos == -1) {
+                nextLinePos = gcode.length();
             }
             
-            if (axis == "X") {
-                newPos.setX(isAbsolute ? value : currentPos.x() + value);
-                hasMovement = true;
-            } 
-            else if (axis == "Y") {
-                newPos.setY(isAbsolute ? value : currentPos.y() + value);
-                hasMovement = true;
-            } 
-            else if (axis == "Z") {
-                newPos.setZ(isAbsolute ? value : currentPos.z() + value);
-                hasMovement = true;
-            }
-        }
-        
-        // Only add point to path if there's actual movement
-        if (hasMovement) {
-            // If movement type changed or we have significant movement, add a new point
-            float distance = (newPos - currentPos).length();
+            // Extract current line
+            QString line = gcode.mid(pos, nextLinePos - pos).trimmed();
+            pos = nextLinePos + 1; // Move to next line
             
-            // Always add if mode changed or moved at least 0.01mm
-            if (isRapid != prevIsRapid || distance > 0.01f) {
-                GCodePoint point;
-                point.position = newPos;
-                point.isRapid = isRapid;
-                toolPath.push_back(point);
-                hasValidToolPath = true;
+            // Skip empty lines and comments
+            if (line.isEmpty() || line.startsWith(';')) {
+                continue;
+            }
+            
+            // Remove comments more efficiently
+            int commentIdx = line.indexOf(';');
+            if (commentIdx >= 0) {
+                line = line.left(commentIdx).trimmed();
+            }
+            
+            // Skip if line is now empty
+            if (line.isEmpty()) {
+                continue;
+            }
+            
+            // Check for G-commands first
+            bool prevIsRapid = isRapid; // Remember previous state
+            
+            if (line.contains(g0Regex)) {
+                isRapid = true;
+            }
+            else if (line.contains(g1Regex)) {
+                isRapid = false;
+            }
+            
+            // Check for other G commands (unit settings, positioning mode)
+            if (line.contains(g20Regex)) {
+                isMetric = false;  // Inch mode
+            }
+            else if (line.contains(g21Regex)) {
+                isMetric = true;   // Metric mode
+            }
+            else if (line.contains(g90Regex)) {
+                isAbsolute = true;  // Absolute positioning
+            }
+            else if (line.contains(g91Regex)) {
+                isAbsolute = false; // Relative positioning
+            }
+            
+            // Check for X, Y, Z coordinates
+            QVector3D newPos = currentPos;
+            bool hasMovement = false;
+            bool hasZMovement = false;
+            bool hasXYMovement = false;
+            
+            QRegularExpressionMatchIterator coordMatches = coordPattern.globalMatch(line);
+            
+            while (coordMatches.hasNext()) {
+                QRegularExpressionMatch match = coordMatches.next();
+                QString axis = match.captured(1).toUpper();
+                float value = match.captured(2).toFloat();
+                
+                // Convert inches to mm if needed
+                if (!isMetric) {
+                    value *= 25.4f;
+                }
+                
+                if (axis == "X") {
+                    newPos.setX(isAbsolute ? value : currentPos.x() + value);
+                    hasMovement = true;
+                    hasXYMovement = true;
+                } 
+                else if (axis == "Y") {
+                    newPos.setY(isAbsolute ? value : currentPos.y() + value);
+                    hasMovement = true;
+                    hasXYMovement = true;
+                } 
+                else if (axis == "Z") {
+                    float oldZ = newPos.z();
+                    float newZ = isAbsolute ? value : currentPos.z() + value;
+                    newPos.setZ(newZ);
+                    hasMovement = true;
+                    hasZMovement = true;
+                    
+                    // Store the Z value
+                    currentZ = newZ;
+                }
+            }
+            
+            // Only add point to path if there's actual movement
+            if (hasMovement) {
+                float distance = (newPos - currentPos).length();
+                
+                // Special handling for vertical Z movements (plunges)
+                if (hasZMovement && !hasXYMovement && hasLastCoordinates) {
+                    // This is a pure Z movement (plunge or retract)
+                    // We need to create a separate rapid point for Z movements
+                    GCodePoint zPoint;
+                    zPoint.position = newPos;
+                    
+                    // Z movements shown as rapid movements for visualization clarity
+                    zPoint.isRapid = true;  // Always treat vertical movements as rapid
+                    
+                    toolPath.push_back(zPoint);
+                    hasValidToolPath = true;
+                    
+                    // If this is a Z plunge (G01) that's about to be followed by a cutting move,
+                    // we need to add a duplicate point with isRapid=false to ensure proper connectivity
+                    if (!isRapid) {
+                        GCodePoint transitionPoint;
+                        transitionPoint.position = newPos;
+                        transitionPoint.isRapid = false; // Mark as cutting move
+                        toolPath.push_back(transitionPoint);
+                    }
+                } 
+                // Standard handling for XY or combined movements
+                else if (isRapid != prevIsRapid || distance > 0.01f) {
+                    GCodePoint point;
+                    point.position = newPos;
+                    point.isRapid = isRapid;
+                    toolPath.push_back(point);
+                    hasValidToolPath = true;
+                }
                 
                 // Update bounds
                 if (!boundsInitialized) {
@@ -1690,25 +1930,48 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
                     maxBounds.setY(std::max(maxBounds.y(), newPos.y()));
                     maxBounds.setZ(std::max(maxBounds.z(), newPos.z()));
                 }
+                
+                // Update last coordinates
+                hasLastCoordinates = true;
+                lastX = newPos.x();
+                lastY = newPos.y();
+                lastZ = newPos.z();
+                
+                // Update current position
+                currentPos = newPos;
             }
-            
-            // Update current position
-            currentPos = newPos;
         }
-    }
-    
-    // If we have a valid tool path, ensure we have some bounds and add padding
-    if (hasValidToolPath && boundsInitialized) {
-        // Add a small padding around the model
-        QVector3D padding = (maxBounds - minBounds) * 0.1f;
-        if (padding.length() < 5.0f) {
-            padding = QVector3D(5.0f, 5.0f, 5.0f);
+        
+        // If we have a valid tool path, ensure we have some bounds and add padding
+        if (hasValidToolPath && boundsInitialized) {
+            // Add a small padding around the model
+            QVector3D padding = (maxBounds - minBounds) * 0.1f;
+            if (padding.length() < 5.0f) {
+                padding = QVector3D(5.0f, 5.0f, 5.0f);
+            }
+            minBounds -= padding;
+            maxBounds += padding;
+        } else {
+            // If no valid path was found, clear the tool path
+            toolPath.clear();
+            hasValidToolPath = false;
         }
-        minBounds -= padding;
-        maxBounds += padding;
-    } else {
-        // If no valid path was found, clear the tool path
+        
+        // Finally, build geometry at appropriate LOD for current view
+        m_pathGeometryNeedsRebuilding = true;
+        pathNeedsUpdate = true;
+        
+        // Start updating path vertices
+        updateTimer->start(100);
+        
+    } catch (const std::exception& e) {
+        qDebug() << "Exception during GCode parsing:" << e.what();
+        // Reset to a safe state
         toolPath.clear();
         hasValidToolPath = false;
+        setIsometricView();
+        scale = 0.5f;
+        pathNeedsUpdate = true;
+        updateTimer->start(100);
     }
 }

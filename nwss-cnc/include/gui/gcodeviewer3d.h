@@ -153,6 +153,24 @@ private:
     float m_animationProgress;
     float m_animationDuration; // seconds
     QTimer* m_animationTimer;
+
+    QOpenGLBuffer pathIndexBuffer;
+    bool useIndexedRendering;
+    int m_rapidIndexCount;
+    int m_cuttingIndexCount;
+    int m_rapidIndexOffset;
+    int m_cuttingIndexOffset;
+    bool m_useSimplifiedGeometry;
+    int m_simplificationFactor;
+    float m_lastScale;
+    bool m_pathGeometryNeedsRebuilding;
+    
+    // For LOD (Level of Detail)
+    std::vector<GCodePoint> m_simplifiedToolPath;
+    std::vector<int> m_indicesRapid;
+    std::vector<int> m_indicesCutting;
+    void rebuildGeometryForCurrentLOD();
+    GCodePoint interpolatePoints(const GCodePoint& a, const GCodePoint& b, float t);
 };
 
 #endif // GCODEVIEWER3D_H
