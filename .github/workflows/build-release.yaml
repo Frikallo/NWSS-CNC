@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -19,7 +19,19 @@ jobs:
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2019_64'
-          modules: 'qtsvg qtserialport'
+          modules: ''  # Empty to avoid errors
+          set-env: 'true'
+          aqtversion: '==3.2.*'
+      
+      - name: List Qt directories
+        run: |
+          echo "Qt installed at: $env:Qt6_DIR"
+          echo "Listing Qt lib directory:"
+          dir $env:Qt6_DIR\lib
+          echo "Checking for QtSvg:"
+          Get-ChildItem -Path $env:Qt6_DIR -Recurse -Filter "*QtSvg*"
+          echo "Checking for QtSerialPort:"
+          Get-ChildItem -Path $env:Qt6_DIR -Recurse -Filter "*QtSerialPort*"
       
       - name: Setup MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
@@ -29,7 +41,8 @@ jobs:
       
       - name: Configure CMake
         working-directory: ./build
-        run: cmake .. -DCMAKE_BUILD_TYPE=Release
+        run: |
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
       
       - name: Build application
         working-directory: ./build
@@ -60,14 +73,27 @@ jobs:
           host: 'mac'
           target: 'desktop'
           arch: 'clang_64'
-          modules: 'qtsvg qtserialport'
+          modules: ''  # Empty to avoid errors
+          set-env: 'true'
+          aqtversion: '==3.2.*'
+      
+      - name: List Qt directories
+        run: |
+          echo "Qt installed at: $Qt6_DIR"
+          echo "Listing Qt lib directory:"
+          ls -la $Qt6_DIR/lib
+          echo "Checking for QtSvg:"
+          find $Qt6_DIR -name "*QtSvg*"
+          echo "Checking for QtSerialPort:"
+          find $Qt6_DIR -name "*QtSerialPort*"
       
       - name: Create build directory
         run: mkdir build
       
       - name: Configure CMake
         working-directory: ./build
-        run: cmake .. -DCMAKE_BUILD_TYPE=Release
+        run: |
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$Qt6_DIR"
       
       - name: Build application
         working-directory: ./build
@@ -100,7 +126,7 @@ jobs:
           path: macos-package
       
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             windows-package/*
