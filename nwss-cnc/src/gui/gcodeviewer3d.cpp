@@ -1,5 +1,6 @@
 #include "gcodeviewer3d.h"
 #include <QRegularExpression>
+#include <QElapsedTimer>
 #include <QDebug>
 #include <cmath>
 
