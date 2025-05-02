@@ -27,7 +27,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
       
       - name: Create build directory
-        run: mkdir build
+        run: cd nwss-cnc && mkdir build
       
       - name: Configure CMake
         working-directory: ./build
@@ -68,7 +68,7 @@ jobs:
           aqtversion: '==3.2.*'
 
       - name: Create build directory
-        run: mkdir build
+        run: cd nwss-cnc && mkdir build
       
       - name: Configure CMake
         working-directory: ./build
