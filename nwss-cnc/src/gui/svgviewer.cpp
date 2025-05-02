@@ -247,6 +247,7 @@ void SVGView::setZoom(int zoomLevel)
 void SVGView::resetZoom()
 {
     if (!m_renderer) return;
+    if (m_svgBounds.isNull()) return;
     
     // Reset the transformation
     resetTransform();
@@ -344,6 +345,7 @@ SVGViewer::SVGViewer(QWidget *parent)
     
     // Disable the convert button initially
     m_convertButton->setEnabled(false);
+    m_fitButton->setEnabled(false);
 }
 
 void SVGViewer::onSvgViewZoomChanged(double zoomFactor)
@@ -426,6 +428,7 @@ void SVGViewer::loadSvgFile(const QString &filePath)
         QFileInfo fileInfo(filePath);
         m_fileNameLabel->setText(fileInfo.fileName());
         m_convertButton->setEnabled(true);
+        m_fitButton->setEnabled(true); // Enable the fit button
         
         // Reset zoom slider to 100%
         m_zoomSlider->setValue(100);
@@ -478,12 +481,15 @@ void SVGViewer::onConvertClicked()
 
 void SVGViewer::onFitToViewClicked()
 {
+    // Only proceed if an SVG is loaded
+    if (!m_svgView->isSvgLoaded()) {
+        return;
+    }
+    
     m_svgView->resetZoom();
     
     // Update zoom slider to match the actual zoom level
-    double zoomPercent = m_svgView->renderer()->defaultSize().width() > 0 
-        ? m_svgView->transform().m11() * 100
-        : 100;
+    double zoomPercent = m_svgView->transform().m11() * 100;
     
     // Block signals to prevent feedback loop
     m_zoomSlider->blockSignals(true);
