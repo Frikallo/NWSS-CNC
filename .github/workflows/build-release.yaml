@@ -88,35 +88,57 @@ jobs:
       - name: Configure CMake
         working-directory: ./nwss-cnc/build
         run: |
-          # Remove -march=native from compile flags
+          # Configure with correct architecture
           cmake .. -DCMAKE_BUILD_TYPE=Release \
-                 -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
-                 -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
-                 -DCMAKE_CXX_FLAGS="-O3"
+                  -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
+                  -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+                  -DCMAKE_CXX_FLAGS="-O3"
 
       - name: Build application
         working-directory: ./nwss-cnc/build
         run: cmake --build . --config Release
 
-      - name: Package application
-        working-directory: ./nwss-cnc/build
-        run: cmake --build . --target package_for_github
-      
-      - name: Rename artifacts for clarity
+      - name: Deploy and Sign app
         working-directory: ./nwss-cnc/build
         run: |
-          for file in *.dmg; do
-            if [ -f "$file" ]; then
-              mv "$file" "${file%.dmg}-${{ matrix.artifact_suffix }}.dmg"
-            fi
-          done
+          # Deploy with Qt dependencies
+          "$Qt6_DIR/bin/macdeployqt" "NWSS-CNC.app" -always-overwrite -verbose=2
+          
+          # Sign with ad-hoc certificate for testing
+          codesign --force --options runtime --deep --sign - --entitlements ../resources/macos/entitlements.plist "NWSS-CNC.app"
+          
+          # Create DMG 
+          "$Qt6_DIR/bin/macdeployqt" "NWSS-CNC.app" -dmg -verbose=2
+          
+          # Rename DMG to include architecture
+          mv "NWSS-CNC.dmg" "NWSS-CNC-${{ matrix.artifact_suffix }}.dmg"
+      
+      - name: Create user instructions
+        working-directory: ./nwss-cnc/build
+        run: |
+          # Create a README with instructions for bypassing Gatekeeper
+          cat > NWSS-CNC-README.txt << EOF
+          NWSS-CNC for macOS ${{ matrix.display_name }}
+          --------------------------------------------
+          
+          If you receive a message that the app is damaged and can't be opened:
+          
+          Option 1: Right-click (or Control+click) on the app and select "Open" from the menu
+          
+          Option 2: Run this command in Terminal:
+          xattr -rd com.apple.quarantine /Applications/NWSS-CNC.app
+          
+          These steps are needed because the app is not signed with an Apple Developer certificate.
+          EOF
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-package-${{ matrix.artifact_suffix }}
-          path: ./nwss-cnc/build/*.dmg
-  
+          path: |
+            ./nwss-cnc/build/*.dmg
+            ./nwss-cnc/build/NWSS-CNC-README.txt
+
   build-linux:
     name: Build Linux (Ubuntu)
     runs-on: ubuntu-latest

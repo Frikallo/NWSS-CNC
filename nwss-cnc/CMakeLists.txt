@@ -131,17 +131,6 @@ if(APPLE)
             MACOSX_PACKAGE_LOCATION "Resources"
     )
     
-    # Add other resources to the bundle
-    file(GLOB_RECURSE EXAMPLE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/example_files/*")
-    foreach(FILE ${EXAMPLE_FILES})
-        file(RELATIVE_PATH REL_FILE "${CMAKE_CURRENT_SOURCE_DIR}/example_files" ${FILE})
-        get_filename_component(REL_DIR ${REL_FILE} DIRECTORY)
-        set_source_files_properties(${FILE}
-            PROPERTIES
-                MACOSX_PACKAGE_LOCATION "Resources/example_files/${REL_DIR}"
-        )
-    endforeach()
-    
     # Add fonts or other resources
     set(RESOURCE_FILES 
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/JetBrainsMono-Regular.ttf"
@@ -224,6 +213,7 @@ target_include_directories(nwss-cnc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/
 if(APPLE)
     set(CPACK_GENERATOR "DragNDrop")
     set_target_properties(nwss-cnc PROPERTIES
+        MACOSX_BUNDLE TRUE
         OUTPUT_NAME "${APP_NAME}"
         MACOSX_BUNDLE_BUNDLE_NAME "${APP_NAME}"
         MACOSX_BUNDLE_GUI_IDENTIFIER "${APP_BUNDLE_IDENTIFIER}"
@@ -232,7 +222,11 @@ if(APPLE)
         MACOSX_BUNDLE_ICON_FILE "${MACOSX_BUNDLE_ICON_FILE}"
         MACOSX_BUNDLE_COPYRIGHT "${APP_COPYRIGHT}"
         RESOURCE "${RESOURCE_FILES}"
+        XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME YES
     )
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/entitlements.plist"
+            DESTINATION "${CMAKE_INSTALL_PREFIX}/NWSS-CNC.app/Contents/Resources"
+            COMPONENT Runtime)
 else()
     set_target_properties(nwss-cnc PROPERTIES
         OUTPUT_NAME "${APP_NAME}"
