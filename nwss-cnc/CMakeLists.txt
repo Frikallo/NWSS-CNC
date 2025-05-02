@@ -40,6 +40,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
         # MSVC compiler flags for optimized release
         add_compile_options(/O2 /Ob2 /GL /Gy /Gw)
         add_link_options(/LTCG)
+        string(REPLACE "/RTC1" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
     else()
         # GCC/Clang compiler flags for optimized release
         add_compile_options(-O3 -march=native -flto)
@@ -195,6 +196,7 @@ target_include_directories(nwss-cnc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/
 
 # Set application properties
 if(APPLE)
+    set(CPACK_GENERATOR "DragNDrop")
     set_target_properties(nwss-cnc PROPERTIES
         OUTPUT_NAME "${APP_NAME}"
         MACOSX_BUNDLE_BUNDLE_NAME "${APP_NAME}"
@@ -251,17 +253,12 @@ if(WIN32)
     ]] COMPONENT Runtime)
 elseif(APPLE)
     # macOS DMG settings
-    set(CPACK_GENERATOR "DragNDrop")
     set(CPACK_DMG_VOLUME_NAME "${APP_NAME}")
     set(CPACK_DMG_FORMAT "UDBZ") # bzip2 compressed disk image
     set(CPACK_DMG_DS_STORE_SETUP_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/DMGSetup.scpt")
     set(CPACK_APPLE_BUNDLE_ID "${APP_BUNDLE_IDENTIFIER}")
     
-    # For macOS, we need to use fixup_bundle to include all dependencies
-    install(CODE [[
-        include(BundleUtilities)
-        fixup_bundle("${CMAKE_INSTALL_PREFIX}/${APP_NAME}.app" "" "")
-    ]] COMPONENT Runtime)
+    set(CPACK_POST_BUILD_SCRIPTS "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/macos_fixup.cmake")
 endif()
 
 # Install the main application
