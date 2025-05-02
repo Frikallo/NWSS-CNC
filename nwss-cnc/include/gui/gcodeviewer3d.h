@@ -69,6 +69,21 @@ private:
     void rotateCubeByMouse(const QPoint& from, const QPoint& to);
     void applyCubeRotation(const QQuaternion& rotation);
     void animateToViewDirection(const QVector3D& direction);
+
+    bool m_useBufferSubData;        // Use more efficient buffer updates
+    int m_visiblePointCount = 0;         // Track visible points
+    std::vector<int> m_pathSegments; // Track where paths start/end
+    float m_viewportScale;           // Current viewport scale for LOD
+    QVector3D m_viewportCenter;      // Current viewport center for culling
+    std::vector<int> m_segmentTypes;
+    
+    // New optimization-related methods
+    void updatePathBuffersEfficiently();
+    void batchRenderPaths();
+    int simplifyPathForViewport(const std::vector<GCodePoint>& path, 
+                               std::vector<float>& outVertices,
+                               float simplificationFactor);
+    bool isPointVisible(const QVector3D& point);
     
     QOpenGLShaderProgram gridProgram;
     QOpenGLShaderProgram pathProgram;

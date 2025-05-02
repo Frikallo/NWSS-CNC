@@ -1109,38 +1109,87 @@ void GCodeViewer3D::makePathVertices()
         return;
     }
 
-    pathVertices.clear();
-    
     // Check if we have tool path points
     if (toolPath.empty() || !hasValidToolPath) {
+        pathVertices.clear();
         return;
     }
     
-    // For each point in the tool path
+    // Reset our data structures
+    pathVertices.clear();
+    m_pathSegments.clear();
+    
+    // Count how many rapid vs cutting moves we have (for debugging)
+    int rapidMoveCount = 0;
+    int cuttingMoveCount = 0;
+    
+    // For tracking segments
+    int currentSegmentStart = 0;
+    bool isCurrentRapid = toolPath[0].isRapid;
+    int pointCount = 0;
+    
+    // Process all points and create segments where movement type changes
     for (size_t i = 0; i < toolPath.size(); i++) {
         const auto &point = toolPath[i];
         
-        // Add position coordinates
+        // If movement type changed, end current segment and start a new one
+        if (i > 0 && point.isRapid != isCurrentRapid) {
+            // End the current segment
+            m_pathSegments.push_back(currentSegmentStart);
+            m_pathSegments.push_back(pointCount);
+            
+            // Update counters based on segment type
+            if (isCurrentRapid) {
+                rapidMoveCount++;
+            } else {
+                cuttingMoveCount++;
+            }
+            
+            // Start a new segment
+            currentSegmentStart = pointCount;
+            isCurrentRapid = point.isRapid;
+        }
+        
+        // Add the point to our vertex array
         pathVertices.push_back(point.position.x());
         pathVertices.push_back(point.position.y());
         pathVertices.push_back(point.position.z());
         
         // Add color data
         if (point.isRapid) {
-            // Blue for rapid moves
+            // Orange for rapid moves
             pathVertices.push_back(1.0f);
             pathVertices.push_back(0.5f);
             pathVertices.push_back(0.0f);
         } else {
-            // Green for cutting moves
+            // Blue for cutting moves
             pathVertices.push_back(0.0f);
             pathVertices.push_back(0.3f);
             pathVertices.push_back(1.0f);
         }
+        
+        pointCount++;
     }
     
+    // Add the final segment
+    if (pointCount > 0) {
+        m_pathSegments.push_back(currentSegmentStart);
+        m_pathSegments.push_back(pointCount);
+        
+        // Update counters based on final segment type
+        if (isCurrentRapid) {
+            rapidMoveCount++;
+        } else {
+            cuttingMoveCount++;
+        }
+    }
+    
+    // Debug output
+    qDebug() << "Created" << rapidMoveCount << "rapid move segments and" 
+             << cuttingMoveCount << "cutting move segments";
+    
     // Only update GPU buffer if the context is valid
-    if (isValid()) {
+    if (isValid() && !pathVertices.empty()) {
         makeCurrent();
         pathVao.bind();
         pathVbo.bind();
@@ -1160,11 +1209,14 @@ void GCodeViewer3D::makePathVertices()
         pathVao.release();
         doneCurrent();
     }
+    
+    // Store the total visible points
+    m_visiblePointCount = pointCount;
 }
 
 void GCodeViewer3D::drawToolPath()
 {
-    if (toolPath.empty() || pathVertices.empty()) {
+    if (toolPath.empty() || pathVertices.empty() || m_visiblePointCount == 0) {
         return;
     }
     
@@ -1184,8 +1236,8 @@ void GCodeViewer3D::drawToolPath()
     glLineWidth(3.0f);
     
     for (size_t i = 0; i < toolPath.size() - 1; i++) {
-        // Draw just this segment
-        glDrawArrays(GL_LINES, i, 2);
+        glLineWidth(3.0f);
+        glDrawArrays(GL_LINE_STRIP, 0, m_visiblePointCount);
     }
     
     pathVao.release();
@@ -1502,12 +1554,15 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
     QVector3D currentPos(0, 0, 0);
     bool isMetric = true;  // G21 is default (metric)
     bool isAbsolute = true;  // G90 is default (absolute coordinates)
-    bool isRapid = true;  // Start with rapid movement
+    bool isRapid = true;  // Start with rapid movement (G00)
     
     // Initialize bounds with first point
     minBounds = QVector3D(0, 0, 0);
     maxBounds = QVector3D(0, 0, 0);
     bool boundsInitialized = false;
+    
+    // Reserve space for efficiency - guess at a reasonable size
+    toolPath.reserve(10000);
     
     // Add initial position
     GCodePoint startPoint;
@@ -1518,6 +1573,19 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
     // Process each line
     const QStringList lines = gcode.split(QRegularExpression("[\r\n]"), Qt::SkipEmptyParts);
     
+    // Pre-compile regular expressions for better performance
+    static QRegularExpression g0Regex("G0[\\s]|G00[\\s]", QRegularExpression::CaseInsensitiveOption);
+    static QRegularExpression g1Regex("G1[\\s]|G01[\\s]", QRegularExpression::CaseInsensitiveOption);
+    static QRegularExpression g20Regex("G20[\\s]", QRegularExpression::CaseInsensitiveOption);
+    static QRegularExpression g21Regex("G21[\\s]", QRegularExpression::CaseInsensitiveOption);
+    static QRegularExpression g90Regex("G90[\\s]", QRegularExpression::CaseInsensitiveOption);
+    static QRegularExpression g91Regex("G91[\\s]", QRegularExpression::CaseInsensitiveOption);
+    static QRegularExpression coordPattern("([XYZ])\\s*(-?\\d*\\.?\\d+)");
+    
+    // Debug counters
+    int g00Count = 0;
+    int g01Count = 0;
+    
     for (const QString &line : lines) {
         QString trimmedLine = line.trimmed();
         
@@ -1526,7 +1594,7 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
             continue;
         }
         
-        // Remove comments
+        // Remove comments more efficiently
         int commentIdx = trimmedLine.indexOf(';');
         if (commentIdx >= 0) {
             trimmedLine = trimmedLine.left(commentIdx).trimmed();
@@ -1537,25 +1605,30 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
             continue;
         }
         
-        // Check for G-commands first
-        if (trimmedLine.contains(QRegularExpression("G0[\\s]", QRegularExpression::CaseInsensitiveOption)) || 
-            trimmedLine.contains(QRegularExpression("G00[\\s]", QRegularExpression::CaseInsensitiveOption))) {
+        // Check for G-commands first - CRITICAL FIX HERE
+        bool prevIsRapid = isRapid; // Remember previous state
+        
+        if (trimmedLine.contains(g0Regex)) {
             isRapid = true;
+            g00Count++;
         }
-        else if (trimmedLine.contains(QRegularExpression("G1[\\s]", QRegularExpression::CaseInsensitiveOption)) || 
-                 trimmedLine.contains(QRegularExpression("G01[\\s]", QRegularExpression::CaseInsensitiveOption))) {
+        else if (trimmedLine.contains(g1Regex)) {
             isRapid = false;
+            g01Count++;
         }
-        else if (trimmedLine.contains(QRegularExpression("G20[\\s]", QRegularExpression::CaseInsensitiveOption))) {
+        // Don't reset isRapid for other commands - mode stays active until changed
+        
+        // Check for other G commands (unit settings, positioning mode)
+        if (trimmedLine.contains(g20Regex)) {
             isMetric = false;  // Inch mode
         }
-        else if (trimmedLine.contains(QRegularExpression("G21[\\s]", QRegularExpression::CaseInsensitiveOption))) {
+        else if (trimmedLine.contains(g21Regex)) {
             isMetric = true;   // Metric mode
         }
-        else if (trimmedLine.contains(QRegularExpression("G90[\\s]", QRegularExpression::CaseInsensitiveOption))) {
+        else if (trimmedLine.contains(g90Regex)) {
             isAbsolute = true;  // Absolute positioning
         }
-        else if (trimmedLine.contains(QRegularExpression("G91[\\s]", QRegularExpression::CaseInsensitiveOption))) {
+        else if (trimmedLine.contains(g91Regex)) {
             isAbsolute = false; // Relative positioning
         }
         
@@ -1563,7 +1636,6 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
         QVector3D newPos = currentPos;
         bool hasMovement = false;
         
-        QRegularExpression coordPattern("([XYZ])\\s*(-?\\d*\\.?\\d+)");
         QRegularExpressionMatchIterator coordMatches = coordPattern.globalMatch(trimmedLine);
         
         while (coordMatches.hasNext()) {
@@ -1590,29 +1662,34 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
             }
         }
         
-        // If we have movement coordinates, add to the tool path
+        // Only add point to path if there's actual movement
         if (hasMovement) {
-            GCodePoint point;
-            point.position = newPos;
-            point.isRapid = isRapid;
-            toolPath.push_back(point);
-            hasValidToolPath = true;
+            // If movement type changed or we have significant movement, add a new point
+            float distance = (newPos - currentPos).length();
             
-            // Update bounds
-            if (!boundsInitialized) {
-                minBounds = newPos;
-                maxBounds = newPos;
-                boundsInitialized = true;
-            } else {
-                // Update mins
-                minBounds.setX(std::min(minBounds.x(), newPos.x()));
-                minBounds.setY(std::min(minBounds.y(), newPos.y()));
-                minBounds.setZ(std::min(minBounds.z(), newPos.z()));
+            // Always add if mode changed or moved at least 0.01mm
+            if (isRapid != prevIsRapid || distance > 0.01f) {
+                GCodePoint point;
+                point.position = newPos;
+                point.isRapid = isRapid;
+                toolPath.push_back(point);
+                hasValidToolPath = true;
                 
-                // Update maxes
-                maxBounds.setX(std::max(maxBounds.x(), newPos.x()));
-                maxBounds.setY(std::max(maxBounds.y(), newPos.y()));
-                maxBounds.setZ(std::max(maxBounds.z(), newPos.z()));
+                // Update bounds
+                if (!boundsInitialized) {
+                    minBounds = newPos;
+                    maxBounds = newPos;
+                    boundsInitialized = true;
+                } else {
+                    // Update mins and maxes
+                    minBounds.setX(std::min(minBounds.x(), newPos.x()));
+                    minBounds.setY(std::min(minBounds.y(), newPos.y()));
+                    minBounds.setZ(std::min(minBounds.z(), newPos.z()));
+                    
+                    maxBounds.setX(std::max(maxBounds.x(), newPos.x()));
+                    maxBounds.setY(std::max(maxBounds.y(), newPos.y()));
+                    maxBounds.setZ(std::max(maxBounds.z(), newPos.z()));
+                }
             }
             
             // Update current position
@@ -1629,10 +1706,6 @@ void GCodeViewer3D::parseGCode(const QString &gcode)
         }
         minBounds -= padding;
         maxBounds += padding;
-        
-        qDebug() << "GCode parsed. Points: " << toolPath.size() 
-                 << " Min bounds: " << minBounds 
-                 << " Max bounds: " << maxBounds;
     } else {
         // If no valid path was found, clear the tool path
         toolPath.clear();

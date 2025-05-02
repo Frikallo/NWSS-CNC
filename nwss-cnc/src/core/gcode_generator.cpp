@@ -173,6 +173,9 @@ void GCodeGenerator::writePath(std::ostream& out, const Path& path, size_t pathI
     // Add path comment
     out << "( Path " << pathIndex << " )" << std::endl;
     
+    // Ensure we're at safe height before rapid move to start point
+    out << "G00 Z" << safeHeight << "  ; Retract to safe height before rapid move" << std::endl;
+    
     // Move to the start point of the path
     out << "G00 X" << points[0].x << " Y" << points[0].y << "  ; Rapid to start point" << std::endl;
     
@@ -215,16 +218,13 @@ void GCodeGenerator::writePath(std::ostream& out, const Path& path, size_t pathI
             }
         }
         
-        // Retract to safe height if not the last pass
-        if (pass < passCount - 1 || passCount == 1) {
-            out << "G00 Z" << safeHeight << "  ; Retract to safe height" << std::endl;
-        }
+        // Retract to safe height between passes and after the last pass
+        out << "G00 Z" << safeHeight << "  ; Retract to safe height" << std::endl;
     }
     
-    // Retract after path is complete
-    if (m_options.separateRetract) {
-        out << "G00 Z" << safeHeight << "  ; Retract to safe height" << std::endl << std::endl;
-    }
+    // No need for separate retract option since we always retract now
+    // Keep an empty line between paths for readability
+    out << std::endl;
 }
 
 } // namespace cnc

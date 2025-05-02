@@ -3,6 +3,8 @@
 #include <QFile>
 #include <QDateTime>
 #include <QFileInfo>
+#include <QElapsedTimer>
+#include <QDebug>
 
 // Include necessary library headers
 #include "core/svg_parser.h"
@@ -46,23 +48,25 @@ QString SvgToGCode::convertSvgToGCode(
     bool separateRetract,
     bool linearizePaths,
     double linearizeTolerance,
-    double toolDiameter)
+    double toolDiameter) 
 {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    
     m_lastError.clear();
+    QElapsedTimer stepTimer;
     
-    // Check if the file exists
-    QFile file(svgFilePath);
-    if (!file.exists()) {
-        m_lastError = "SVG file does not exist: " + svgFilePath;
-        return QString();
-    }
-    
+    // Step 1: Load SVG file
+    stepTimer.start();
     nwss::cnc::SVGParser parser;
     if (!parser.loadFromFile(svgFilePath.toStdString(), "mm", 96.0f)) {
         m_lastError = "Failed to load SVG file: " + svgFilePath;
         return QString();
     }
-
+    qDebug() << "Step 1: SVG loading took" << stepTimer.elapsed() << "ms";
+    
+    // Step 2: Get dimensions
+    stepTimer.restart();
     float width, height;
     if (parser.getDimensions(width, height)) {
         qDebug() << "SVG Dimensions: " << width << " x " << height << " mm";
@@ -70,7 +74,10 @@ QString SvgToGCode::convertSvgToGCode(
         m_lastError = "Failed to get SVG dimensions.";
         return QString();
     }
-
+    qDebug() << "Step 2: Get dimensions took" << stepTimer.elapsed() << "ms";
+    
+    // Step 3: Configure discretizer
+    stepTimer.restart();
     nwss::cnc::Discretizer discretizer;
     nwss::cnc::DiscretizerConfig discretizerConfig;
     discretizerConfig.bezierSamples = bezierSamples;
@@ -78,12 +85,13 @@ QString SvgToGCode::convertSvgToGCode(
     discretizerConfig.adaptiveSampling = adaptiveSampling;
     discretizerConfig.maxPointDistance = maxPointDistance;
     discretizer.setConfig(discretizerConfig);
+    
     nwss::cnc::CNConfig CNconfig;
     CNconfig.setBedWidth(bedWidth);
     CNconfig.setBedHeight(bedHeight);
     CNconfig.setUnitsFromString(units);
-    CNconfig.setMaterialWidth(bedWidth);
-    CNconfig.setMaterialHeight(bedHeight);
+    CNconfig.setMaterialWidth(materialWidth);
+    CNconfig.setMaterialHeight(materialHeight);
     CNconfig.setMaterialThickness(materialThickness);
     CNconfig.setFeedRate(feedRate);
     CNconfig.setPlungeRate(plungeRate);
@@ -91,24 +99,38 @@ QString SvgToGCode::convertSvgToGCode(
     CNconfig.setCutDepth(passDepth);
     CNconfig.setPassCount(passCount);
     CNconfig.setSafeHeight(safetyHeight);
-
+    qDebug() << "Step 3: Configuration took" << stepTimer.elapsed() << "ms";
+    
+    // Step 4: Discretize SVG paths
+    stepTimer.restart();
     std::vector<nwss::cnc::Path> allPaths = discretizer.discretizeImage(parser.getRawImage());
-
+    qDebug() << "Step 4: Path discretization took" << stepTimer.elapsed() << "ms" 
+             << "(" << allPaths.size() << " paths)";
+    
+    // Step 5: Get bounds for diagnostics
+    stepTimer.restart();
     double minX, minY, maxX, maxY;
     if (nwss::cnc::Transform::getBounds(allPaths, minX, minY, maxX, maxY)) {
         double width = maxX - minX;
         double height = maxY - minY;
+        qDebug() << "Paths bounds:" << minX << minY << maxX << maxY;
     }
-
+    qDebug() << "Step 5: Get bounds took" << stepTimer.elapsed() << "ms";
+    
+    // Step 6: Transform paths to fit material
+    stepTimer.restart();
     nwss::cnc::TransformInfo transformInfo;
     if (nwss::cnc::Transform::fitToMaterial(allPaths, CNconfig, preserveAspectRatio, 
                                 centerDesign, centerDesign, flipY, &transformInfo)) {
-        qDebug() << "Transform Info: " << nwss::cnc::Transform::formatTransformInfo(transformInfo, CNconfig);
+        qDebug() << "Transform Info: " << transformInfo.message.c_str();
     } else {
         m_lastError = "Failed to fit paths to material.";
         return QString();
     }
-
+    qDebug() << "Step 6: Transform paths took" << stepTimer.elapsed() << "ms";
+    
+    // Step 7: Generate GCode
+    stepTimer.restart();
     nwss::cnc::GCodeGenerator gCodeGen;
     nwss::cnc::GCodeOptions gCodeOptions;
     gCodeOptions.optimizePaths = optimizePaths;
@@ -119,12 +141,18 @@ QString SvgToGCode::convertSvgToGCode(
     gCodeOptions.toolDiameter = toolDiameter;
     gCodeGen.setConfig(CNconfig);
     gCodeGen.setOptions(gCodeOptions);
-
+    
     std::string gCode = gCodeGen.generateGCodeString(allPaths);
     if (gCode.empty()) {
         m_lastError = "Failed to generate GCode.";
         return QString();
     }
     QString gCodeString = QString::fromStdString(gCode);
+    qDebug() << "Step 7: GCode generation took" << stepTimer.elapsed() << "ms" 
+             << "(GCode size:" << gCodeString.size() << "bytes)";
+    
+    // Total time
+    qDebug() << "Total SVG to GCode conversion took" << totalTimer.elapsed() << "ms";
+    
     return gCodeString;
 }
