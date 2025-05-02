@@ -118,20 +118,26 @@ jobs:
         working-directory: ./nwss-cnc/build
         run: cmake --build . --config Release
 
+      - name: Print environment info
+        run: |
+          echo "Qt6_DIR: $Qt6_DIR"
+          ls -la "$Qt6_DIR/bin"
+          echo "PATH: $PATH"
+
       - name: Deploy and Sign app
         working-directory: ./nwss-cnc/build
         run: |
-          # Deploy with Qt dependencies
-          "$Qt6_DIR/bin/macdeployqt" "NWSS-CNC.app" -always-overwrite -verbose=2
+          # Deploy with Qt dependencies - using the full path to macdeployqt
+          "$Qt6_DIR/bin/macdeployqt" NWSS-CNC.app -always-overwrite -verbose=2
           
           # Sign with ad-hoc certificate for testing
-          codesign --force --options runtime --deep --sign - --entitlements ../resources/macos/entitlements.plist "NWSS-CNC.app"
+          codesign --force --options runtime --deep --sign - --entitlements ../resources/macos/entitlements.plist NWSS-CNC.app
           
-          # Create DMG 
-          "$Qt6_DIR/bin/macdeployqt" "NWSS-CNC.app" -dmg -verbose=2
+          # Create DMG - using the full path to macdeployqt 
+          "$Qt6_DIR/bin/macdeployqt" NWSS-CNC.app -dmg -verbose=2
           
           # Rename DMG to include architecture
-          mv "NWSS-CNC.dmg" "NWSS-CNC-${{ matrix.artifact_suffix }}.dmg"
+          mv NWSS-CNC.dmg NWSS-CNC-${{ matrix.artifact_suffix }}.dmg
       
       - name: Create user instructions
         working-directory: ./nwss-cnc/build
