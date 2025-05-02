@@ -47,8 +47,8 @@ jobs:
         with:
           name: windows-package
           path: |
-            build/*.zip
-            build/*.exe
+            ./nwss-cnc/build/*.zip
+            ./nwss-cnc/build/*.exe
   
   build-macos:
     runs-on: macos-latest
@@ -87,7 +87,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-package
-          path: build/*.dmg
+          path: ./nwss-cnc/build/*.dmg
   
   create-release:
     needs: [build-windows, build-macos]
