@@ -22,17 +22,7 @@ jobs:
           modules: ''  # Empty to avoid errors
           set-env: 'true'
           aqtversion: '==3.2.*'
-      
-      - name: List Qt directories
-        run: |
-          echo "Qt installed at: $env:Qt6_DIR"
-          echo "Listing Qt lib directory:"
-          dir $env:Qt6_DIR\lib
-          echo "Checking for QtSvg:"
-          Get-ChildItem -Path $env:Qt6_DIR -Recurse -Filter "*QtSvg*"
-          echo "Checking for QtSerialPort:"
-          Get-ChildItem -Path $env:Qt6_DIR -Recurse -Filter "*QtSerialPort*"
-      
+
       - name: Setup MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
       
@@ -76,17 +66,7 @@ jobs:
           modules: ''  # Empty to avoid errors
           set-env: 'true'
           aqtversion: '==3.2.*'
-      
-      - name: List Qt directories
-        run: |
-          echo "Qt installed at: $Qt6_DIR"
-          echo "Listing Qt lib directory:"
-          ls -la $Qt6_DIR/lib
-          echo "Checking for QtSvg:"
-          find $Qt6_DIR -name "*QtSvg*"
-          echo "Checking for QtSerialPort:"
-          find $Qt6_DIR -name "*QtSerialPort*"
-      
+
       - name: Create build directory
         run: mkdir build
       
