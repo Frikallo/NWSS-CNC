@@ -87,10 +87,12 @@ jobs:
 
       - name: Configure CMake
         working-directory: ./nwss-cnc/build
-        env:
-          CMAKE_OSX_ARCHITECTURES: ${{ matrix.arch }}
         run: |
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$Qt6_DIR" -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
+          # Remove -march=native from compile flags
+          cmake .. -DCMAKE_BUILD_TYPE=Release \
+                 -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
+                 -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+                 -DCMAKE_CXX_FLAGS="-O3"
 
       - name: Build application
         working-directory: ./nwss-cnc/build
@@ -104,7 +106,9 @@ jobs:
         working-directory: ./nwss-cnc/build
         run: |
           for file in *.dmg; do
-            mv "$file" "${file%.dmg}-${{ matrix.artifact_suffix }}.dmg"
+            if [ -f "$file" ]; then
+              mv "$file" "${file%.dmg}-${{ matrix.artifact_suffix }}.dmg"
+            fi
           done
       
       - name: Upload artifacts
@@ -126,7 +130,7 @@ jobs:
           sudo apt-get install -y build-essential cmake ninja-build \
             libgl1-mesa-dev libfontconfig1-dev libfreetype6-dev \
             libx11-dev libxext-dev libxfixes-dev libxi-dev \
-            libxrender-dev libxcb1-dev python3-pip
+            libxrender-dev libxcb1-dev
       
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -145,7 +149,9 @@ jobs:
       - name: Configure CMake
         working-directory: ./nwss-cnc/build
         run: |
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$Qt6_DIR"
+          cmake .. -DCMAKE_BUILD_TYPE=Release \
+                 -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
+                 -DCMAKE_CXX_FLAGS="-O3"
 
       - name: Build application
         working-directory: ./nwss-cnc/build
@@ -167,7 +173,6 @@ jobs:
   create-release:
     needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
-    # Add permissions for the release job
     permissions:
       contents: write  # This is the critical permission needed to create releases
     steps:

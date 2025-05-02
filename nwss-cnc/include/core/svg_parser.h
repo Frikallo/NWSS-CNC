@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <cstdint>
 
 // Forward declarations for NanoSVG types
 struct NSVGimage;

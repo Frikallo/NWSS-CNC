@@ -44,7 +44,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
         string(REPLACE "/RTC1" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
     else()
         # GCC/Clang compiler flags for optimized release
-        add_compile_options(-O3 -march=native -flto)
+        add_compile_options(-O3)
         
         if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
             add_link_options(-flto)
