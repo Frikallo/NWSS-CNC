@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=@APP_NAME@
+Comment=SVG to G-Code Converter
+Exec=@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_BINDIR@/nwss-cnc
+Icon=@APP_NAME@
+Categories=Graphics;Engineering;
+Terminal=false
