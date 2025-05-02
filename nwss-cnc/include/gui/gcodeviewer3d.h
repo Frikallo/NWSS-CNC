@@ -12,7 +12,9 @@
 #include <QWheelEvent>
 #include <QString>
 #include <QTimer>
+#include <QPainter>
 #include <vector>
+#include <QQuaternion>
 
 // GCode Tool Path Point
 struct GCodePoint {
@@ -39,6 +41,7 @@ protected:
     
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
 
 private:
@@ -51,6 +54,21 @@ private:
     void updatePathVertices();
     void autoScaleToFit();
     void setIsometricView();
+    
+    // Navigation cube methods
+    void initViewCube();
+    void drawViewCube(QPainter* painter);
+    bool isPointInViewCube(const QPoint& point);
+    int getCubeFaceAtPoint(const QPoint& point);
+    void setViewDirection(const QVector3D& direction);
+    void animateToView(const QVector3D& targetPosition, const QVector3D& targetTarget);
+    void updateAnimation();
+    
+    // Arcball rotation methods
+    QVector3D mapToSphere(const QPointF& point);
+    void rotateCubeByMouse(const QPoint& from, const QPoint& to);
+    void applyCubeRotation(const QQuaternion& rotation);
+    void animateToViewDirection(const QVector3D& direction);
     
     QOpenGLShaderProgram gridProgram;
     QOpenGLShaderProgram pathProgram;
@@ -70,6 +88,11 @@ private:
     QVector3D cameraTarget;
     float scale;
     QPoint lastMousePos;
+    QPoint m_dragStartPos;
+    bool m_ignorePanOnRelease;
+    QQuaternion m_startOrientation;
+    QQuaternion m_targetOrientation;
+    QVector3D m_rotationCenter;
     
     std::vector<GCodePoint> toolPath;
     std::vector<float> pathVertices;
@@ -81,6 +104,40 @@ private:
     bool autoScaleEnabled;  // Controls whether auto-scaling is enabled
     bool hasValidToolPath;  // Flag to track if we have valid toolpath data
     QTimer *updateTimer;
+    
+    // View cube structures and variables
+    struct CubeFace {
+        int id;
+        QVector3D normal;
+        std::vector<QVector3D> vertices;
+        QVector3D center;
+        QColor color;
+        QColor hoverColor;
+        QString label;
+        bool isHovered;
+    };
+    
+    std::vector<CubeFace> m_cubeViewFaces;
+    int m_hoveredFaceId;
+    bool m_cubeViewVisible;
+    QPointF m_cubePosition; // Screen position of the cube
+    float m_cubeSize; // Size of the cube in pixels
+    
+    // New variables for free cube rotation
+    bool m_isDraggingCube;
+    QPoint m_lastCubeDragPos;
+    QQuaternion m_cubeOrientation;
+    QQuaternion m_viewOrientation;
+    
+    // Animation for camera transitions
+    bool m_isAnimating;
+    QVector3D m_startCameraPosition;
+    QVector3D m_targetCameraPosition;
+    QVector3D m_startCameraTarget;
+    QVector3D m_targetCameraTarget;
+    float m_animationProgress;
+    float m_animationDuration; // seconds
+    QTimer* m_animationTimer;
 };
 
 #endif // GCODEVIEWER3D_H

@@ -8,15 +8,26 @@ GCodeViewer3D::GCodeViewer3D(QWidget *parent)
       gridVbo(QOpenGLBuffer::VertexBuffer),
       pathVbo(QOpenGLBuffer::VertexBuffer),
       cameraPosition(0.0f, 0.0f, 0.0f),
-      cameraTarget(0.0f, 0.0f, 0.0f),
+      cameraTarget(0.0f, 0.0f, 0.0f),  // Always keep target at origin by default
       scale(0.5f),
       minBounds(-50.0f, -50.0f, -50.0f),
       maxBounds(50.0f, 50.0f, 50.0f),
       pathNeedsUpdate(false),
       autoScaleEnabled(false),
-      hasValidToolPath(false)
+      hasValidToolPath(false),
+      m_hoveredFaceId(-1),
+      m_cubeViewVisible(true),
+      m_isDraggingCube(false),
+      m_isAnimating(false),
+      m_animationProgress(0.0f),
+      m_animationDuration(0.5f), // 500ms animation
+      m_rotationCenter(0.0f, 0.0f, 0.0f) // Set rotation center to origin
 {
     setFocusPolicy(Qt::StrongFocus);
+    
+    // Initialize with identity quaternions
+    m_cubeOrientation = QQuaternion();
+    m_viewOrientation = QQuaternion();
     
     // Set up a timer to handle batched updates
     updateTimer = new QTimer(this);
@@ -31,6 +42,10 @@ GCodeViewer3D::GCodeViewer3D(QWidget *parent)
             pathNeedsUpdate = false;
         }
     });
+    
+    // Set up animation timer for view transitions
+    m_animationTimer = new QTimer(this);
+    connect(m_animationTimer, &QTimer::timeout, this, &GCodeViewer3D::updateAnimation);
 }
 
 GCodeViewer3D::~GCodeViewer3D()
@@ -84,7 +99,710 @@ void GCodeViewer3D::initializeGL()
     // Fixed scale for empty view
     scale = 1.0f;
     
+    // Initialize view cube
+    initViewCube();
+    
     makePathVertices();
+}
+
+void GCodeViewer3D::initViewCube() {
+    // Create a more complex navigation cube with isometric view options
+    // This creates a truncated cube with 8 triangular faces and 18 square faces
+    m_cubeViewFaces.clear();
+    
+    // Define truncation factor (how much to cut off corners)
+    float t = 0.35f; // Truncation factor
+    float s = 1.0f - t; // Scaled coordinate for truncated vertices
+    
+    // Define cube size and position (in screen coordinates)
+    m_cubeSize = 85.0f; // pixels - slightly larger to accommodate more faces
+    int margin = 10;
+    m_cubePosition = QPointF(width() - m_cubeSize - margin, margin);
+    
+    // Define 24 vertices of the truncated cube
+    std::vector<QVector3D> vertices = {
+        // Front face vertices (truncated)
+        QVector3D(-s, -1, -s), QVector3D(s, -1, -s),  // 0, 1: bottom edge
+        QVector3D(s, -1, s),   QVector3D(-s, -1, s),  // 2, 3: top edge
+        
+        // Back face vertices (truncated)
+        QVector3D(-s, 1, -s),  QVector3D(s, 1, -s),   // 4, 5: bottom edge
+        QVector3D(s, 1, s),    QVector3D(-s, 1, s),   // 6, 7: top edge
+        
+        // Connecting left face vertices
+        QVector3D(-1, -s, -s), QVector3D(-1, s, -s),  // 8, 9: bottom edge
+        QVector3D(-1, s, s),   QVector3D(-1, -s, s),  // 10, 11: top edge
+        
+        // Connecting right face vertices
+        QVector3D(1, -s, -s),  QVector3D(1, s, -s),   // 12, 13: bottom edge
+        QVector3D(1, s, s),    QVector3D(1, -s, s),   // 14, 15: top edge
+        
+        // Connecting top face vertices
+        QVector3D(-s, -s, 1),  QVector3D(s, -s, 1),   // 16, 17: front edge
+        QVector3D(s, s, 1),    QVector3D(-s, s, 1),   // 18, 19: back edge
+        
+        // Connecting bottom face vertices
+        QVector3D(-s, -s, -1), QVector3D(s, -s, -1),  // 20, 21: front edge
+        QVector3D(s, s, -1),   QVector3D(-s, s, -1)   // 22, 23: back edge
+    };
+    
+    // Define the 6 main square faces (truncated original cube faces)
+    
+    // Front face (Z-)
+    CubeFace frontFace;
+    frontFace.id = 0;
+    frontFace.normal = QVector3D(0, -1, 0);
+    frontFace.vertices = {vertices[0], vertices[1], vertices[2], vertices[3]};
+    frontFace.center = QVector3D(0, -1, 0);
+    frontFace.color = QColor(200, 200, 200, 200);
+    frontFace.hoverColor = QColor(255, 255, 0, 200);
+    frontFace.label = "Front";
+    frontFace.isHovered = false;
+    m_cubeViewFaces.push_back(frontFace);
+    
+    // Back face (Z+)
+    CubeFace backFace;
+    backFace.id = 1;
+    backFace.normal = QVector3D(0, 1, 0);
+    backFace.vertices = {vertices[4], vertices[5], vertices[6], vertices[7]};
+    backFace.center = QVector3D(0, 1, 0);
+    backFace.color = QColor(180, 180, 180, 200);
+    backFace.hoverColor = QColor(255, 255, 0, 200);
+    backFace.label = "Back";
+    backFace.isHovered = false;
+    m_cubeViewFaces.push_back(backFace);
+    
+    // Left face (X-)
+    CubeFace leftFace;
+    leftFace.id = 2;
+    leftFace.normal = QVector3D(-1, 0, 0);
+    leftFace.vertices = {vertices[8], vertices[9], vertices[10], vertices[11]};
+    leftFace.center = QVector3D(-1, 0, 0);
+    leftFace.color = QColor(160, 160, 160, 200);
+    leftFace.hoverColor = QColor(255, 255, 0, 200);
+    leftFace.label = "Left";
+    leftFace.isHovered = false;
+    m_cubeViewFaces.push_back(leftFace);
+    
+    // Right face (X+)
+    CubeFace rightFace;
+    rightFace.id = 3;
+    rightFace.normal = QVector3D(1, 0, 0);
+    rightFace.vertices = {vertices[12], vertices[13], vertices[14], vertices[15]};
+    rightFace.center = QVector3D(1, 0, 0);
+    rightFace.color = QColor(160, 160, 160, 200);
+    rightFace.hoverColor = QColor(255, 255, 0, 200);
+    rightFace.label = "Right";
+    rightFace.isHovered = false;
+    m_cubeViewFaces.push_back(rightFace);
+    
+    // Top face (Y+)
+    CubeFace topFace;
+    topFace.id = 4;
+    topFace.normal = QVector3D(0, 0, 1);
+    topFace.vertices = {vertices[16], vertices[17], vertices[18], vertices[19]};
+    topFace.center = QVector3D(0, 0, 1);
+    topFace.color = QColor(140, 140, 140, 200);
+    topFace.hoverColor = QColor(255, 255, 0, 200);
+    topFace.label = "Top";
+    topFace.isHovered = false;
+    m_cubeViewFaces.push_back(topFace);
+    
+    // Bottom face (Y-)
+    CubeFace bottomFace;
+    bottomFace.id = 5;
+    bottomFace.normal = QVector3D(0, 0, -1);
+    bottomFace.vertices = {vertices[20], vertices[21], vertices[22], vertices[23]};
+    bottomFace.center = QVector3D(0, 0, -1);
+    bottomFace.color = QColor(140, 140, 140, 200);
+    bottomFace.hoverColor = QColor(255, 255, 0, 200);
+    bottomFace.label = "Bottom";
+    bottomFace.isHovered = false;
+    m_cubeViewFaces.push_back(bottomFace);
+    
+    // Define the 12 additional square faces (edge truncations)
+    
+    // Front-Left edge face
+    CubeFace frontLeftFace;
+    frontLeftFace.id = 6;
+    frontLeftFace.normal = QVector3D(-0.7071f, -0.7071f, 0);
+    frontLeftFace.vertices = {vertices[0], vertices[3], vertices[11], vertices[8]};
+    frontLeftFace.center = QVector3D(-0.7071f, -0.7071f, 0);
+    frontLeftFace.color = QColor(170, 170, 170, 200);
+    frontLeftFace.hoverColor = QColor(255, 255, 0, 200);
+    frontLeftFace.label = "";
+    frontLeftFace.isHovered = false;
+    m_cubeViewFaces.push_back(frontLeftFace);
+    
+    // Front-Right edge face
+    CubeFace frontRightFace;
+    frontRightFace.id = 7;
+    frontRightFace.normal = QVector3D(0.7071f, -0.7071f, 0);
+    frontRightFace.vertices = {vertices[1], vertices[12], vertices[15], vertices[2]};
+    frontRightFace.center = QVector3D(0.7071f, -0.7071f, 0);
+    frontRightFace.color = QColor(170, 170, 170, 200);
+    frontRightFace.hoverColor = QColor(255, 255, 0, 200);
+    frontRightFace.label = "";
+    frontRightFace.isHovered = false;
+    m_cubeViewFaces.push_back(frontRightFace);
+    
+    // Front-Top edge face
+    CubeFace frontTopFace;
+    frontTopFace.id = 8;
+    frontTopFace.normal = QVector3D(0, -0.7071f, 0.7071f);
+    frontTopFace.vertices = {vertices[3], vertices[2], vertices[17], vertices[16]};
+    frontTopFace.center = QVector3D(0, -0.7071f, 0.7071f);
+    frontTopFace.color = QColor(170, 170, 170, 200);
+    frontTopFace.hoverColor = QColor(255, 255, 0, 200);
+    frontTopFace.label = "";
+    frontTopFace.isHovered = false;
+    m_cubeViewFaces.push_back(frontTopFace);
+    
+    // Front-Bottom edge face
+    CubeFace frontBottomFace;
+    frontBottomFace.id = 9;
+    frontBottomFace.normal = QVector3D(0, -0.7071f, -0.7071f);
+    frontBottomFace.vertices = {vertices[0], vertices[1], vertices[21], vertices[20]};
+    frontBottomFace.center = QVector3D(0, -0.7071f, -0.7071f);
+    frontBottomFace.color = QColor(170, 170, 170, 200);
+    frontBottomFace.hoverColor = QColor(255, 255, 0, 200);
+    frontBottomFace.label = "";
+    frontBottomFace.isHovered = false;
+    m_cubeViewFaces.push_back(frontBottomFace);
+    
+    // Back-Left edge face
+    CubeFace backLeftFace;
+    backLeftFace.id = 10;
+    backLeftFace.normal = QVector3D(-0.7071f, 0.7071f, 0);
+    backLeftFace.vertices = {vertices[4], vertices[9], vertices[10], vertices[7]};
+    backLeftFace.center = QVector3D(-0.7071f, 0.7071f, 0);
+    backLeftFace.color = QColor(170, 170, 170, 200);
+    backLeftFace.hoverColor = QColor(255, 255, 0, 200);
+    backLeftFace.label = "";
+    backLeftFace.isHovered = false;
+    m_cubeViewFaces.push_back(backLeftFace);
+    
+    // Back-Right edge face
+    CubeFace backRightFace;
+    backRightFace.id = 11;
+    backRightFace.normal = QVector3D(0.7071f, 0.7071f, 0);
+    backRightFace.vertices = {vertices[5], vertices[6], vertices[14], vertices[13]};
+    backRightFace.center = QVector3D(0.7071f, 0.7071f, 0);
+    backRightFace.color = QColor(170, 170, 170, 200);
+    backRightFace.hoverColor = QColor(255, 255, 0, 200);
+    backRightFace.label = "";
+    backRightFace.isHovered = false;
+    m_cubeViewFaces.push_back(backRightFace);
+    
+    // Back-Top edge face
+    CubeFace backTopFace;
+    backTopFace.id = 12;
+    backTopFace.normal = QVector3D(0, 0.7071f, 0.7071f);
+    backTopFace.vertices = {vertices[7], vertices[6], vertices[18], vertices[19]};
+    backTopFace.center = QVector3D(0, 0.7071f, 0.7071f);
+    backTopFace.color = QColor(170, 170, 170, 200);
+    backTopFace.hoverColor = QColor(255, 255, 0, 200);
+    backTopFace.label = "";
+    backTopFace.isHovered = false;
+    m_cubeViewFaces.push_back(backTopFace);
+    
+    // Back-Bottom edge face
+    CubeFace backBottomFace;
+    backBottomFace.id = 13;
+    backBottomFace.normal = QVector3D(0, 0.7071f, -0.7071f);
+    backBottomFace.vertices = {vertices[4], vertices[5], vertices[22], vertices[23]};
+    backBottomFace.center = QVector3D(0, 0.7071f, -0.7071f);
+    backBottomFace.color = QColor(170, 170, 170, 200);
+    backBottomFace.hoverColor = QColor(255, 255, 0, 200);
+    backBottomFace.label = "";
+    backBottomFace.isHovered = false;
+    m_cubeViewFaces.push_back(backBottomFace);
+    
+    // Left-Top edge face
+    CubeFace leftTopFace;
+    leftTopFace.id = 14;
+    leftTopFace.normal = QVector3D(-0.7071f, 0, 0.7071f);
+    leftTopFace.vertices = {vertices[11], vertices[10], vertices[19], vertices[16]};
+    leftTopFace.center = QVector3D(-0.7071f, 0, 0.7071f);
+    leftTopFace.color = QColor(170, 170, 170, 200);
+    leftTopFace.hoverColor = QColor(255, 255, 0, 200);
+    leftTopFace.label = "";
+    leftTopFace.isHovered = false;
+    m_cubeViewFaces.push_back(leftTopFace);
+    
+    // Left-Bottom edge face
+    CubeFace leftBottomFace;
+    leftBottomFace.id = 15;
+    leftBottomFace.normal = QVector3D(-0.7071f, 0, -0.7071f);
+    leftBottomFace.vertices = {vertices[8], vertices[9], vertices[23], vertices[20]};
+    leftBottomFace.center = QVector3D(-0.7071f, 0, -0.7071f);
+    leftBottomFace.color = QColor(170, 170, 170, 200);
+    leftBottomFace.hoverColor = QColor(255, 255, 0, 200);
+    leftBottomFace.label = "";
+    leftBottomFace.isHovered = false;
+    m_cubeViewFaces.push_back(leftBottomFace);
+    
+    // Right-Top edge face
+    CubeFace rightTopFace;
+    rightTopFace.id = 16;
+    rightTopFace.normal = QVector3D(0.7071f, 0, 0.7071f);
+    rightTopFace.vertices = {vertices[15], vertices[14], vertices[18], vertices[17]};
+    rightTopFace.center = QVector3D(0.7071f, 0, 0.7071f);
+    rightTopFace.color = QColor(170, 170, 170, 200);
+    rightTopFace.hoverColor = QColor(255, 255, 0, 200);
+    rightTopFace.label = "";
+    rightTopFace.isHovered = false;
+    m_cubeViewFaces.push_back(rightTopFace);
+    
+    // Right-Bottom edge face
+    CubeFace rightBottomFace;
+    rightBottomFace.id = 17;
+    rightBottomFace.normal = QVector3D(0.7071f, 0, -0.7071f);
+    rightBottomFace.vertices = {vertices[12], vertices[13], vertices[22], vertices[21]};
+    rightBottomFace.center = QVector3D(0.7071f, 0, -0.7071f);
+    rightBottomFace.color = QColor(170, 170, 170, 200);
+    rightBottomFace.hoverColor = QColor(255, 255, 0, 200);
+    rightBottomFace.label = "";
+    rightBottomFace.isHovered = false;
+    m_cubeViewFaces.push_back(rightBottomFace);
+    
+    // Define the 8 triangular faces at the corners
+    
+    // Front-Left-Bottom corner
+    CubeFace frontLeftBottomFace;
+    frontLeftBottomFace.id = 18;
+    frontLeftBottomFace.normal = QVector3D(-0.577f, -0.577f, -0.577f);
+    frontLeftBottomFace.vertices = {vertices[0], vertices[8], vertices[20]};
+    frontLeftBottomFace.center = QVector3D(-0.577f, -0.577f, -0.577f);
+    frontLeftBottomFace.color = QColor(220, 180, 180, 200);
+    frontLeftBottomFace.hoverColor = QColor(255, 255, 0, 200);
+    frontLeftBottomFace.label = "ISO1";
+    frontLeftBottomFace.isHovered = false;
+    m_cubeViewFaces.push_back(frontLeftBottomFace);
+    
+    // Front-Right-Bottom corner
+    CubeFace frontRightBottomFace;
+    frontRightBottomFace.id = 19;
+    frontRightBottomFace.normal = QVector3D(0.577f, -0.577f, -0.577f);
+    frontRightBottomFace.vertices = {vertices[1], vertices[21], vertices[12]};
+    frontRightBottomFace.center = QVector3D(0.577f, -0.577f, -0.577f);
+    frontRightBottomFace.color = QColor(220, 180, 180, 200);
+    frontRightBottomFace.hoverColor = QColor(255, 255, 0, 200);
+    frontRightBottomFace.label = "ISO2";
+    frontRightBottomFace.isHovered = false;
+    m_cubeViewFaces.push_back(frontRightBottomFace);
+    
+    // Front-Left-Top corner
+    CubeFace frontLeftTopFace;
+    frontLeftTopFace.id = 20;
+    frontLeftTopFace.normal = QVector3D(-0.577f, -0.577f, 0.577f);
+    frontLeftTopFace.vertices = {vertices[3], vertices[16], vertices[11]};
+    frontLeftTopFace.center = QVector3D(-0.577f, -0.577f, 0.577f);
+    frontLeftTopFace.color = QColor(220, 180, 180, 200);
+    frontLeftTopFace.hoverColor = QColor(255, 255, 0, 200);
+    frontLeftTopFace.label = "ISO3";
+    frontLeftTopFace.isHovered = false;
+    m_cubeViewFaces.push_back(frontLeftTopFace);
+    
+    // Front-Right-Top corner
+    CubeFace frontRightTopFace;
+    frontRightTopFace.id = 21;
+    frontRightTopFace.normal = QVector3D(0.577f, -0.577f, 0.577f);
+    frontRightTopFace.vertices = {vertices[2], vertices[15], vertices[17]};
+    frontRightTopFace.center = QVector3D(0.577f, -0.577f, 0.577f);
+    frontRightTopFace.color = QColor(220, 180, 180, 200);
+    frontRightTopFace.hoverColor = QColor(255, 255, 0, 200);
+    frontRightTopFace.label = "ISO4";
+    frontRightTopFace.isHovered = false;
+    m_cubeViewFaces.push_back(frontRightTopFace);
+    
+    // Back-Left-Bottom corner
+    CubeFace backLeftBottomFace;
+    backLeftBottomFace.id = 22;
+    backLeftBottomFace.normal = QVector3D(-0.577f, 0.577f, -0.577f);
+    backLeftBottomFace.vertices = {vertices[4], vertices[23], vertices[9]};
+    backLeftBottomFace.center = QVector3D(-0.577f, 0.577f, -0.577f);
+    backLeftBottomFace.color = QColor(180, 220, 180, 200);
+    backLeftBottomFace.hoverColor = QColor(255, 255, 0, 200);
+    backLeftBottomFace.label = "ISO5";
+    backLeftBottomFace.isHovered = false;
+    m_cubeViewFaces.push_back(backLeftBottomFace);
+    
+    // Back-Right-Bottom corner
+    CubeFace backRightBottomFace;
+    backRightBottomFace.id = 23;
+    backRightBottomFace.normal = QVector3D(0.577f, 0.577f, -0.577f);
+    backRightBottomFace.vertices = {vertices[5], vertices[13], vertices[22]};
+    backRightBottomFace.center = QVector3D(0.577f, 0.577f, -0.577f);
+    backRightBottomFace.color = QColor(180, 220, 180, 200);
+    backRightBottomFace.hoverColor = QColor(255, 255, 0, 200);
+    backRightBottomFace.label = "ISO6";
+    backRightBottomFace.isHovered = false;
+    m_cubeViewFaces.push_back(backRightBottomFace);
+    
+    // Back-Left-Top corner
+    CubeFace backLeftTopFace;
+    backLeftTopFace.id = 24;
+    backLeftTopFace.normal = QVector3D(-0.577f, 0.577f, 0.577f);
+    backLeftTopFace.vertices = {vertices[7], vertices[10], vertices[19]};
+    backLeftTopFace.center = QVector3D(-0.577f, 0.577f, 0.577f);
+    backLeftTopFace.color = QColor(180, 220, 180, 200);
+    backLeftTopFace.hoverColor = QColor(255, 255, 0, 200);
+    backLeftTopFace.label = "ISO7";
+    backLeftTopFace.isHovered = false;
+    m_cubeViewFaces.push_back(backLeftTopFace);
+    
+    // Back-Right-Top corner
+    CubeFace backRightTopFace;
+    backRightTopFace.id = 25;
+    backRightTopFace.normal = QVector3D(0.577f, 0.577f, 0.577f);
+    backRightTopFace.vertices = {vertices[6], vertices[18], vertices[14]};
+    backRightTopFace.center = QVector3D(0.577f, 0.577f, 0.577f);
+    backRightTopFace.color = QColor(180, 220, 180, 200);
+    backRightTopFace.hoverColor = QColor(255, 255, 0, 200);
+    backRightTopFace.label = "ISO8";
+    backRightTopFace.isHovered = false;
+    m_cubeViewFaces.push_back(backRightTopFace);
+}
+
+void GCodeViewer3D::drawViewCube(QPainter* painter) {
+    if (!m_cubeViewVisible) return;
+    
+    // Save painter state
+    painter->save();
+    
+    // Translate to cube position in screen space
+    painter->translate(m_cubePosition.x() + m_cubeSize/2, m_cubePosition.y() + m_cubeSize/2);
+    
+    // Calculate orientation that matches the main view
+    // This ensures the cube stays oriented the same as the axes
+    QMatrix4x4 viewMatrix = view;
+    QMatrix4x4 cubeMatrix;
+    cubeMatrix.setToIdentity();
+    
+    // Extract just the rotation from the view matrix
+    QMatrix3x3 rotationOnly;
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            rotationOnly(i, j) = viewMatrix(i, j);
+        }
+    }
+    
+    // Apply inverse rotation so cube follows the view
+    cubeMatrix.setToIdentity();
+    cubeMatrix.rotate(m_cubeOrientation);
+    
+    // Draw a subtle semi-transparent background sphere for the cube
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(QColor(100, 100, 100, 80));
+    painter->drawEllipse(QPointF(0, 0), m_cubeSize/2 * 1.1, m_cubeSize/2 * 1.1);
+    
+    // Sort faces by depth (z-value) for proper rendering order
+    std::vector<int> faceOrder;
+    for (int i = 0; i < m_cubeViewFaces.size(); i++) {
+        faceOrder.push_back(i);
+    }
+    
+    std::sort(faceOrder.begin(), faceOrder.end(), [this, &cubeMatrix](int a, int b) {
+        // Calculate center z-value of each face for depth sorting
+        QVector3D centerA = cubeMatrix.map(m_cubeViewFaces[a].center);
+        QVector3D centerB = cubeMatrix.map(m_cubeViewFaces[b].center);
+        return centerA.z() < centerB.z(); // Sort from back to front
+    });
+    
+    // Draw each face in the sorted order
+    for (int idx : faceOrder) {
+        const CubeFace& face = m_cubeViewFaces[idx];
+        
+        // Create a polygon for the face
+        QPolygonF polygon;
+        for (const QVector3D& v : face.vertices) {
+            // Apply rotation
+            QVector3D rotated = cubeMatrix.map(v);
+            polygon << QPointF(rotated.x() * m_cubeSize/2, rotated.y() * m_cubeSize/2);
+        }
+        
+        // Determine if face is oriented toward camera (for label visibility)
+        QVector3D normalRotated = cubeMatrix.map(face.normal);
+        bool isFaceVisible = normalRotated.z() < -0.05; // Only visible if somewhat facing camera
+        
+        // Draw face with appropriate color
+        QColor color;
+        color = face.color;
+        painter->setPen(QPen(QColor(0, 0, 0, 100), 1));
+        
+        // Make more prominent if this is a triangular isometric face
+        if (idx >= 18) { // Isometric faces are ID 18-25
+            if (!face.isHovered) {
+                // Make non-hovered isometric faces slightly more vibrant
+                color.setAlpha(230);
+            }
+        }
+        
+        painter->setBrush(QBrush(color));
+        painter->drawPolygon(polygon);
+        
+        // Draw label in the center of the face (only if facing forward enough)
+        if (isFaceVisible && !face.label.isEmpty()) {
+            QVector3D labelPos = cubeMatrix.map(face.center);
+            QFont font = painter->font();
+            // Make isometric labels more visible
+            if (idx >= 18) {
+                font.setBold(true);
+                font.setPointSize(7);
+            } else {
+                font.setPointSize(8);
+            }
+            painter->setFont(font);
+            painter->setPen(face.isHovered ? Qt::black : Qt::black);
+            
+            // Calculate text width for centering
+            QFontMetrics fm(font);
+            int textWidth = fm.horizontalAdvance(face.label);
+            
+            painter->drawText(
+                QPointF(labelPos.x() * m_cubeSize/2 - textWidth/2,
+                        labelPos.y() * m_cubeSize/2 + 4),
+                face.label
+            );
+        }
+    }
+    
+    // Draw axes indicators
+    // painter->setPen(QPen(Qt::red, 2));
+    // QVector3D xAxis = cubeMatrix.map(QVector3D(1.5, 0, 0));
+    // painter->drawLine(QPointF(0, 0), QPointF(xAxis.x() * m_cubeSize/2, xAxis.y() * m_cubeSize/2));
+    
+    // painter->setPen(QPen(Qt::green, 2));
+    // QVector3D yAxis = cubeMatrix.map(QVector3D(0, 1.5, 0));
+    // painter->drawLine(QPointF(0, 0), QPointF(yAxis.x() * m_cubeSize/2, yAxis.y() * m_cubeSize/2));
+    
+    // painter->setPen(QPen(Qt::blue, 2));
+    // QVector3D zAxis = cubeMatrix.map(QVector3D(0, 0, 1.5));
+    // painter->drawLine(QPointF(0, 0), QPointF(zAxis.x() * m_cubeSize/2, zAxis.y() * m_cubeSize/2));
+    
+    // Restore painter state
+    painter->restore();
+}
+
+bool GCodeViewer3D::isPointInViewCube(const QPoint& point) {
+    // Get the center of the cube
+    QPointF center(m_cubePosition.x() + m_cubeSize/2, m_cubePosition.y() + m_cubeSize/2);
+    
+    // Calculate distance from center to point
+    QPointF delta = QPointF(point) - center;
+    double distance = sqrt(delta.x() * delta.x() + delta.y() * delta.y());
+    
+    // Slightly larger detection radius for better usability
+    return distance <= (m_cubeSize/2 * 1.25);
+}
+
+int GCodeViewer3D::getCubeFaceAtPoint(const QPoint& point) {
+    if (!isPointInViewCube(point)) return -1;
+    
+    // Convert to local cube coordinates
+    QPointF localPoint(
+        point.x() - (m_cubePosition.x() + m_cubeSize/2),
+        point.y() - (m_cubePosition.y() + m_cubeSize/2)
+    );
+    
+    // Use the current cube orientation
+    QMatrix4x4 cubeMatrix;
+    cubeMatrix.setToIdentity();
+    cubeMatrix.rotate(m_cubeOrientation);
+    
+    // Find the visible face at this point
+    int closestFace = -1;
+    float closestDepth = std::numeric_limits<float>::max();
+    
+    // Debug vector to collect face info
+    QVector<QPair<int, float>> faceDepths;
+    
+    for (int i = 0; i < m_cubeViewFaces.size(); i++) {
+        const CubeFace& face = m_cubeViewFaces[i];
+        
+        // Create a polygon for the face
+        QPolygonF polygon;
+        for (const QVector3D& v : face.vertices) {
+            // Apply rotation
+            QVector3D rotated = cubeMatrix.map(v);
+            polygon << QPointF(rotated.x() * m_cubeSize/2, rotated.y() * m_cubeSize/2);
+        }
+        
+        // Check if the point is inside the polygon
+        if (polygon.containsPoint(localPoint, Qt::OddEvenFill)) {
+            // Get the z-coordinate of face center to determine depth
+            QVector3D centerRotated = cubeMatrix.map(face.center);
+            
+            // Store all matching faces and their depths for debugging
+            faceDepths.append(qMakePair(i, centerRotated.z()));
+            
+            // Update closest face if this one is closer to the camera (smaller z-value)
+            if (centerRotated.z() < closestDepth) {
+                if (centerRotated.z() < 0) {
+                    // If the face is behind the camera, ignore it
+                    continue;
+                }
+                closestDepth = centerRotated.z();
+                closestFace = i;
+            }
+        }
+    }
+    
+    return closestFace;
+}
+
+QVector3D GCodeViewer3D::mapToSphere(const QPointF& point) {
+    // Convert from view cube's screen position to [-1, 1] range
+    QPointF cubeCenter(m_cubePosition.x() + m_cubeSize/2, m_cubePosition.y() + m_cubeSize/2);
+    QPointF p = (point - cubeCenter) / (m_cubeSize/2);
+    
+    // Clamp to boundary of sphere
+    double lengthSquared = p.x() * p.x() + p.y() * p.y();
+    if (lengthSquared > 1.0) {
+        double norm = 1.0 / sqrt(lengthSquared);
+        p *= norm;
+        lengthSquared = 1.0;
+    }
+    
+    // Convert to 3D point on arcball sphere
+    double z = sqrt(1.0 - lengthSquared);
+    return QVector3D(p.x(), p.y(), z);
+}
+
+void GCodeViewer3D::rotateCubeByMouse(const QPoint& from, const QPoint& to)
+{
+    // Convert screen points to points on the virtual sphere
+    QVector3D v1 = mapToSphere(from);
+    QVector3D v2 = mapToSphere(to);
+    
+    // Compute the axis of rotation (cross product of vectors)
+    QVector3D axis = QVector3D::crossProduct(v1, v2);
+    if (axis.length() < 0.00001) return; // No rotation needed
+    
+    // Compute the angle of rotation
+    axis.normalize();
+    double dot = QVector3D::dotProduct(v1, v2);
+    dot = qBound(-1.0, dot, 1.0); // Clamp to avoid domain errors
+    
+    double angle = acos(dot) * 180.0 / M_PI;
+    
+    // Create quaternion for this rotation
+    QQuaternion newRotation = QQuaternion::fromAxisAndAngle(axis, angle);
+    
+    // Apply rotation to current orientation - both cube and view orientation
+    m_cubeOrientation = newRotation * m_cubeOrientation;
+    m_viewOrientation = m_cubeOrientation; // Keep these in sync
+    
+    // Calculate new camera position based on orientation
+    float distance = (cameraPosition - cameraTarget).length();
+    
+    // Start with a base direction vector (0, 0, distance)
+    QVector3D baseDir(0, -distance, 0);
+    
+    // Create rotation matrix from view orientation
+    QMatrix4x4 rotMat;
+    rotMat.setToIdentity();
+    rotMat.rotate(m_viewOrientation);
+    
+    // Apply rotation to get new camera position
+    QVector3D newDir = rotMat.map(baseDir);
+    
+    // Update camera position while keeping target fixed at rotation center
+    cameraPosition = m_rotationCenter + newDir;
+    cameraTarget = m_rotationCenter; // Ensure target stays at rotation center
+    
+    // Update view matrix
+    view.setToIdentity();
+    view.lookAt(cameraPosition, cameraTarget, QVector3D(0.0f, 0.0f, 1.0f));
+    
+    update();
+}
+
+void GCodeViewer3D::applyCubeRotation(const QQuaternion& rotation)
+{
+    // Apply the rotation to BOTH the cube and scene view
+    m_viewOrientation = rotation * m_viewOrientation;
+    m_cubeOrientation = m_viewOrientation; // Keep both in sync
+    
+    // Calculate new camera position based on orientation
+    float distance = (cameraPosition - cameraTarget).length();
+    
+    // Start with a base direction vector (0, 0, distance)
+    QVector3D baseDir(0, -distance, 0);
+    
+    // Rotate by the current view orientation
+    QMatrix4x4 rotMat;
+    rotMat.setToIdentity();
+    rotMat.rotate(m_viewOrientation);
+    
+    QVector3D newDir = rotMat.map(baseDir);
+    
+    // Update camera position while keeping target fixed at rotation center
+    cameraPosition = m_rotationCenter + newDir;
+    cameraTarget = m_rotationCenter; // Ensure target stays at the rotation center
+    
+    // Update view matrix
+    view.setToIdentity();
+    view.lookAt(cameraPosition, cameraTarget, QVector3D(0.0f, 0.0f, 1.0f));
+    
+    update();
+}
+
+void GCodeViewer3D::setViewDirection(const QVector3D& direction) {
+    // Call the animation method instead of instantly changing the view
+    animateToViewDirection(direction);
+}
+
+void GCodeViewer3D::animateToView(const QVector3D& targetPosition, const QVector3D& targetTarget) {
+    // Set up animation parameters
+    m_isAnimating = true;
+    m_startCameraPosition = cameraPosition;
+    m_targetCameraPosition = targetPosition;
+    m_startCameraTarget = cameraTarget;
+    m_targetCameraTarget = targetTarget;
+    m_animationProgress = 0.0f;
+    
+    // Start the animation timer if not already running
+    if (!m_animationTimer->isActive()) {
+        m_animationTimer->start(16); // ~60 fps
+    }
+}
+
+void GCodeViewer3D::updateAnimation() 
+{
+    if (!m_isAnimating) return;
+    
+    // Update animation progress
+    m_animationProgress += 0.016f / m_animationDuration; // 16ms per frame
+    
+    if (m_animationProgress >= 1.0f) {
+        // Animation complete
+        m_animationProgress = 1.0f;
+        m_isAnimating = false;
+        m_animationTimer->stop();
+    }
+    
+    // Use a smoothstep curve for more natural animation
+    float t = m_animationProgress;
+    float smoothT = t * t * (3.0f - 2.0f * t);
+    
+    // Interpolate camera position and target
+    cameraPosition = m_startCameraPosition + smoothT * (m_targetCameraPosition - m_startCameraPosition);
+    cameraTarget = m_rotationCenter; // Always keep target at rotation center
+    
+    // Interpolate orientation (slerp)
+    m_viewOrientation = QQuaternion::slerp(m_startOrientation, m_targetOrientation, smoothT);
+    
+    // Keep cube orientation in sync with view orientation
+    m_cubeOrientation = m_viewOrientation;
+    
+    // Update view matrix
+    view.setToIdentity();
+    view.lookAt(cameraPosition, cameraTarget, QVector3D(0.0f, 0.0f, 1.0f));
+    
+    // Trigger a redraw
+    update();
 }
 
 void GCodeViewer3D::setIsometricView()
@@ -92,20 +810,44 @@ void GCodeViewer3D::setIsometricView()
     // Distance from origin
     float distance = 500.0f;
     
-    // Create an isometric view rotated 90 degrees around Z
-    // Instead of (1,1,1), use a different direction vector
-    QVector3D isoDirection(1.0f, -1.0f, 1.0f); // Rotated 90 degrees around Z
+    // Create an isometric view
+    QVector3D isoDirection(1.0f, -1.0f, 1.0f);
     isoDirection.normalize();
     
-    // Position camera for isometric projection
-    cameraPosition = isoDirection * distance;
-    cameraTarget = QVector3D(0.0f, 0.0f, 0.0f);
+    // Position camera for isometric projection with origin as target
+    cameraTarget = m_rotationCenter; // Always set to origin or defined rotation center
+    cameraPosition = cameraTarget + isoDirection * distance;
+    
+    // Calculate the corresponding orientation quaternion
+    QVector3D forward = (cameraTarget - cameraPosition).normalized();
+    QVector3D worldForward(0.0f, -1.0f, 0.0f); // Initial view direction
+    
+    // Find the axis and angle to rotate from worldForward to forward
+    QVector3D axis = QVector3D::crossProduct(worldForward, forward);
+    if (axis.length() < 0.001f) {
+        // Vectors are parallel or opposite - find another axis
+        if (QVector3D::dotProduct(worldForward, forward) < 0) {
+            // Opposite directions - rotate 180 degrees around any perpendicular axis
+            axis = QVector3D(0, 0, 1);
+            m_viewOrientation = QQuaternion::fromAxisAndAngle(axis, 180.0f);
+        } else {
+            // Same direction - no rotation needed
+            m_viewOrientation = QQuaternion();
+        }
+    } else {
+        // Normal case - calculate rotation
+        axis.normalize();
+        float angle = acos(QVector3D::dotProduct(worldForward, forward)) * 180.0f / M_PI;
+        m_viewOrientation = QQuaternion::fromAxisAndAngle(axis, angle);
+    }
+    
+    // Keep cube orientation in sync with view orientation
+    m_cubeOrientation = m_viewOrientation;
     
     // Update view matrix
     view.setToIdentity();
     view.lookAt(cameraPosition, cameraTarget, QVector3D(0.0f, 0.0f, 1.0f));
 }
-
 
 void GCodeViewer3D::setupGridShaders()
 {
@@ -213,21 +955,25 @@ void GCodeViewer3D::resizeGL(int width, int height)
     if (autoScaleEnabled && hasValidToolPath) {
         autoScaleToFit();
     }
+    
+    // Update cube position
+    int margin = 20;
+    m_cubePosition = QPointF(width - m_cubeSize - margin, margin);
 }
 
 void GCodeViewer3D::paintGL()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
-    // Maintain isometric view while applying scale
-    QVector3D viewDirection = (cameraPosition - cameraTarget).normalized();
-    float viewDistance = 300.0f / scale; // Scale affects how far away we are
+    // Use the viewDirection with the rotation center as reference
+    QVector3D viewDirection = (cameraPosition - m_rotationCenter).normalized();
+    float viewDistance = (cameraPosition - m_rotationCenter).length() / scale;
     
-    QVector3D scaledPosition = cameraTarget + viewDirection * viewDistance;
+    QVector3D scaledPosition = m_rotationCenter + viewDirection * viewDistance;
     
-    // Update view matrix without rotation
+    // Update view matrix with the correct target
     view.setToIdentity();
-    view.lookAt(scaledPosition, cameraTarget, QVector3D(0.0f, 0.0f, 1.0f));
+    view.lookAt(scaledPosition, m_rotationCenter, QVector3D(0.0f, 0.0f, 1.0f));
     
     // Apply rotation to the model matrix instead
     model.setToIdentity();
@@ -238,6 +984,21 @@ void GCodeViewer3D::paintGL()
     if (hasValidToolPath) {
         drawToolPath();
     }
+    
+    // After all OpenGL rendering, switch to painter for the UI elements
+    glDisable(GL_DEPTH_TEST);
+    
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    
+    // Draw the view cube
+    drawViewCube(&painter);
+    
+    // End painting
+    painter.end();
+    
+    // Re-enable depth testing for subsequent frames
+    glEnable(GL_DEPTH_TEST);
 }
 
 void GCodeViewer3D::drawGrid()
@@ -433,12 +1194,77 @@ void GCodeViewer3D::drawToolPath()
 
 void GCodeViewer3D::mousePressEvent(QMouseEvent *event)
 {
-    lastMousePos = event->pos();
+    // Only respond to left button clicks
+    if (event->button() == Qt::LeftButton) {
+        m_dragStartPos = event->pos();
+        
+        // Check if we're clicking on the view cube
+        if (isPointInViewCube(event->pos())) {
+            // Start a drag operation on the cube
+            m_isDraggingCube = true;
+            m_lastCubeDragPos = event->pos();
+            setCursor(Qt::ClosedHandCursor);
+            event->accept();
+            return;
+        }
+        
+        // Otherwise, store position for standard camera panning
+        lastMousePos = event->pos();
+    }
 }
 
 void GCodeViewer3D::mouseMoveEvent(QMouseEvent *event)
 {
-    if (event->buttons() & Qt::LeftButton) {
+    // First check if we're hovering over the cube, regardless of drag state
+    bool isOverCube = isPointInViewCube(event->pos());
+    int hoveredFace = -1;
+    
+    if (isOverCube) {
+        // Determine which face we're hovering over
+        hoveredFace = getCubeFaceAtPoint(event->pos());
+        
+        // Update cursor
+        if (hoveredFace >= 0) {
+            setCursor(Qt::PointingHandCursor);
+        } else {
+            setCursor(Qt::ArrowCursor);
+        }
+    } else {
+        setCursor(Qt::ArrowCursor);
+    }
+    
+    // Update hover states regardless of drag state
+    bool needsUpdate = false;
+    
+    // Update hover state on each face
+    for (int i = 0; i < m_cubeViewFaces.size(); i++) {
+        bool shouldBeHovered = (i == hoveredFace);
+        if (m_cubeViewFaces[i].isHovered != shouldBeHovered) {
+            m_cubeViewFaces[i].isHovered = shouldBeHovered;
+            needsUpdate = true;
+        }
+    }
+    
+    // Update global hover state
+    if (m_hoveredFaceId != hoveredFace) {
+        m_hoveredFaceId = hoveredFace;
+        needsUpdate = true;
+    }
+    
+    // Now handle dragging if it's happening
+    if (m_isDraggingCube) {
+        // When dragging the cube, update its orientation
+        rotateCubeByMouse(m_lastCubeDragPos, event->pos());
+        m_lastCubeDragPos = event->pos();
+        event->accept();
+        
+        // Always update after a drag
+        update();
+        return;
+    } else if (event->buttons() & Qt::LeftButton) {
+        // Handle regular view panning, NOT cube dragging
+        // This runs when the mouse is away from the cube
+        
         // Calculate mouse movement delta
         int dx = event->pos().x() - lastMousePos.x();
         int dy = event->pos().y() - lastMousePos.y();
@@ -462,26 +1288,95 @@ void GCodeViewer3D::mouseMoveEvent(QMouseEvent *event)
             upVector.normalize();
         }
         
-        // Since we rotate the model and not the view, we need to rotate our movement vector
-        // to match the rotated coordinate system
+        // Get movement vector for pan
         QVector3D movement = -rightVector * dx * panSpeed + upVector * dy * panSpeed;
         
-        // Create a rotation matrix for our 90-degree Z rotation
-        QMatrix4x4 rotMat;
-        rotMat.setToIdentity();
-
-        // Apply rotation to the movement vector
-        QVector4D rotatedMovement = rotMat * QVector4D(movement, 0.0f);
-        movement = QVector3D(rotatedMovement.x(), rotatedMovement.y(), rotatedMovement.z());
-        
-        // Apply the rotated movement to camera position and target
+        // Apply the movement to camera position and target
         cameraPosition += movement;
         cameraTarget += movement;
+        m_rotationCenter += movement; // Move the rotation center when panning
         
+        // Always update when panning
+        update();
+    }
+    
+    // Update the view if hover states changed
+    if (needsUpdate) {
         update();
     }
     
     lastMousePos = event->pos();
+}
+
+void GCodeViewer3D::animateToViewDirection(const QVector3D& direction)
+{
+    // Normalize the direction
+    QVector3D viewDir = direction.normalized();
+    
+    // Calculate distance from target to camera (preserve current distance)
+    float distance = (cameraPosition - cameraTarget).length();
+    
+    // Calculate target camera position based on direction and distance
+    QVector3D targetCameraPos = m_rotationCenter - viewDir * distance;
+    
+    // Calculate rotation needed to look from this position toward target
+    QVector3D lookDir = (m_rotationCenter - targetCameraPos).normalized();
+    
+    // Find the axis and angle to align with this direction
+    QVector3D initialDir(0, -1, 0); // Initial view direction
+    QVector3D rotAxis = QVector3D::crossProduct(initialDir, lookDir);
+    
+    // Store the starting orientation
+    m_startOrientation = m_viewOrientation;
+    
+    if (rotAxis.length() < 0.001f) {
+        // Vectors are parallel or opposite
+        if (QVector3D::dotProduct(initialDir, lookDir) < 0) {
+            // Opposite directions - rotate 180 degrees around any perpendicular axis
+            rotAxis = QVector3D(0, 0, 1);
+            m_targetOrientation = QQuaternion::fromAxisAndAngle(rotAxis, 180.0f);
+        } else {
+            // Same direction - no rotation needed
+            m_targetOrientation = QQuaternion();
+        }
+    } else {
+        // Calculate rotation
+        rotAxis.normalize();
+        float angle = acos(QVector3D::dotProduct(initialDir, lookDir)) * 180.0f / M_PI;
+        m_targetOrientation = QQuaternion::fromAxisAndAngle(rotAxis, angle);
+    }
+    
+    // Start animation - target is always the rotation center now
+    animateToView(targetCameraPos, m_rotationCenter);
+}
+
+void GCodeViewer3D::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        // Check if we were dragging the cube
+        if (m_isDraggingCube) {
+            // End drag operation
+            m_isDraggingCube = false;
+            
+            // Reset cursor - it will be updated on next mouse move
+            setCursor(Qt::ArrowCursor);
+            
+            // Check if this was a click (minimal movement)
+            if ((event->pos() - m_dragStartPos).manhattanLength() < 5) {
+                // This was a click rather than a drag
+                // Get the face ID at this point
+                int faceId = getCubeFaceAtPoint(event->pos());
+
+                // If we have a valid face, navigate to it
+                if (faceId >= 0 && faceId < m_cubeViewFaces.size()) {
+                    animateToViewDirection(m_cubeViewFaces[faceId].normal);
+                }
+            }
+            
+            event->accept();
+        }
+        // We don't do anything on a regular mouse release - camera stays where it is
+    }
 }
 
 void GCodeViewer3D::wheelEvent(QWheelEvent *event)
@@ -559,8 +1454,8 @@ void GCodeViewer3D::autoScaleToFit()
     targetScale *= 0.8f;
     
     // Adjust scale limits for very large models
-    float minScale = 0.001f; // Previously 0.1f
-    float maxScale = 50.0f;  // Previously 10.0f
+    float minScale = 0.001f;
+    float maxScale = 50.0f;
     
     // Limit scale to reasonable bounds
     if (targetScale < minScale) targetScale = minScale;
@@ -569,10 +1464,15 @@ void GCodeViewer3D::autoScaleToFit()
     // Apply new scale
     scale = targetScale;
     
-    // Center the view on the model
+    // Calculate model center and set as rotation center
     QVector3D modelCenter = (minBounds + maxBounds) * 0.5f;
-    cameraTarget = modelCenter;
-    cameraPosition = cameraTarget + (cameraPosition - cameraTarget);
+    m_rotationCenter = modelCenter; // Set rotation center to model center
+    cameraTarget = m_rotationCenter; // Update camera target to match
+    
+    // Maintain current orientation but adjust distance
+    QVector3D viewDir = (cameraPosition - cameraTarget).normalized();
+    float newDistance = diagonal / (targetScale * 0.8f);
+    cameraPosition = cameraTarget + viewDir * newDistance;
     
     qDebug() << "Auto-scaled to fit. Model size:" << diagonal << "New scale:" << scale;
     

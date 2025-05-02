@@ -156,7 +156,7 @@ void MainWindow::setupTabWidget()
     // Add tabs
     tabWidget->addTab(gCodeEditor, tr("G-Code Editor"));
     tabWidget->addTab(gCodeViewer, tr("3D Preview"));
-    tabWidget->addTab(svgViewer, tr("SVG Viewer"));
+    tabWidget->addTab(svgViewer, tr("Designer"));
     
     // Set as central widget
     setCentralWidget(tabWidget);
@@ -280,7 +280,7 @@ void MainWindow::createToolBars()
     QComboBox *tabComboBox = new QComboBox();
     tabComboBox->addItem(tr("G-Code Editor"));
     tabComboBox->addItem(tr("3D Preview"));
-    tabComboBox->addItem(tr("SVG Viewer"));
+    tabComboBox->addItem(tr("Designer"));
     connect(tabComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), 
             tabWidget, &QTabWidget::setCurrentIndex);
     viewToolBar->addWidget(tabComboBox);
@@ -386,7 +386,7 @@ void MainWindow::importSvgFile()
                                                    tr("SVG Files (*.svg);;All Files (*)"));
     if (!fileName.isEmpty()) {
         svgViewer->loadSvgFile(fileName);
-        tabWidget->setCurrentIndex(2); // Switch to SVG viewer tab
+        tabWidget->setCurrentIndex(2);
     }
 }
 
