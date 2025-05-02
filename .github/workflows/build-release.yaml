@@ -8,21 +8,8 @@ on:
 
 jobs:
   build-windows:
-    name: Build Windows (${{ matrix.arch }})
+    name: Build Windows (x64)
     runs-on: windows-2022
-    strategy:
-      matrix:
-        arch: [win64_msvc2019_64, win32_msvc2019]
-        include:
-          - arch: win64_msvc2019_64
-            qt_arch: win64_msvc2019_64
-            display_name: Windows x64
-            artifact_suffix: win64
-          - arch: win32_msvc2019
-            qt_arch: win32_msvc2019
-            display_name: Windows x86
-            artifact_suffix: win32
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,7 +20,7 @@ jobs:
           version: '6.5.0'
           host: 'windows'
           target: 'desktop'
-          arch: ${{ matrix.qt_arch }}
+          arch: 'win64_msvc2019_64'
           modules: 'qtserialport'
           set-env: 'true'
           aqtversion: '==3.2.*'
@@ -41,10 +28,10 @@ jobs:
       - name: Setup MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: ${{ contains(matrix.arch, 'win64') && 'x64' || 'x86' }}
+          arch: 'x64'
       
       - name: Create build directory
-        run: cd nwss-cnc && mkdir build
+        run: mkdir -p nwss-cnc/build
 
       - name: Configure CMake
         working-directory: ./nwss-cnc/build
@@ -59,35 +46,25 @@ jobs:
         working-directory: ./nwss-cnc/build
         run: cmake --build . --target package_for_github
       
-      - name: Rename artifacts for clarity
-        working-directory: ./nwss-cnc/build
-        run: |
-          Get-ChildItem -Path "." -Filter "*.exe" | Rename-Item -NewName {$_.BaseName + "-${{ matrix.artifact_suffix }}" + $_.Extension}
-          Get-ChildItem -Path "." -Filter "*.zip" | Rename-Item -NewName {$_.BaseName + "-${{ matrix.artifact_suffix }}" + $_.Extension}
-      
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-package-${{ matrix.artifact_suffix }}
+          name: windows-package-x64
           path: |
             ./nwss-cnc/build/*.zip
             ./nwss-cnc/build/*.exe
   
   build-macos:
-    name: Build macOS (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
+    name: Build macOS
+    runs-on: macos-latest
     strategy:
       matrix:
         include:
           - arch: x86_64
-            runner: macos-12
-            qt_arch: clang_64
-            display_name: macOS Intel
+            display_name: Intel
             artifact_suffix: intel
           - arch: arm64
-            runner: macos-14
-            qt_arch: clang_64
-            display_name: macOS Apple Silicon
+            display_name: Apple Silicon
             artifact_suffix: arm64
 
     steps:
@@ -100,13 +77,13 @@ jobs:
           version: '6.5.0'
           host: 'mac'
           target: 'desktop'
-          arch: ${{ matrix.qt_arch }}
+          arch: 'clang_64'
           modules: 'qtserialport'
           set-env: 'true'
           aqtversion: '==3.2.*'
 
       - name: Create build directory
-        run: cd nwss-cnc && mkdir build
+        run: mkdir -p nwss-cnc/build
 
       - name: Configure CMake
         working-directory: ./nwss-cnc/build
@@ -137,72 +114,33 @@ jobs:
           path: ./nwss-cnc/build/*.dmg
   
   build-linux:
-    name: Build Linux (${{ matrix.distro }})
+    name: Build Linux (Ubuntu)
     runs-on: ubuntu-latest
-    container: ${{ matrix.container }}
-    strategy:
-      matrix:
-        include:
-          - distro: ubuntu-22.04
-            container: ubuntu:22.04
-            display_name: Ubuntu 22.04
-            artifact_suffix: ubuntu2204
-          - distro: debian-11
-            container: debian:11
-            display_name: Debian 11
-            artifact_suffix: debian11
-
     steps:
-      - name: Install dependencies
-        run: |
-          apt-get update && apt-get install -y \
-            build-essential \
-            cmake \
-            ninja-build \
-            git \
-            pkg-config \
-            libgl1-mesa-dev \
-            libfontconfig1-dev \
-            libfreetype6-dev \
-            libx11-dev \
-            libx11-xcb-dev \
-            libxext-dev \
-            libxfixes-dev \
-            libxi-dev \
-            libxrender-dev \
-            libxcb1-dev \
-            libxcb-glx0-dev \
-            libxcb-keysyms1-dev \
-            libxcb-image0-dev \
-            libxcb-shm0-dev \
-            libxcb-icccm4-dev \
-            libxcb-sync-dev \
-            libxcb-xfixes0-dev \
-            libxcb-shape0-dev \
-            libxcb-randr0-dev \
-            libxcb-render-util0-dev \
-            libxcb-util-dev \
-            libxcb-xinerama0-dev \
-            libxcb-xkb-dev \
-            libxkbcommon-dev \
-            libxkbcommon-x11-dev \
-            wget \
-            ca-certificates
-
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Install Qt
+      - name: Install dependencies
         run: |
-          wget https://github.com/miurahr/aqtinstall/releases/download/v3.2.3/aqt_x64_3.2.3.tar.gz
-          tar -xzf aqt_x64_3.2.3.tar.gz
-          cd aqt_x64
-          ./aqt install-qt linux desktop 6.5.0 gcc_64 -m qtserialport
-          echo "Qt6_DIR=$PWD/6.5.0/gcc_64" >> $GITHUB_ENV
-          echo "$PWD/6.5.0/gcc_64/bin" >> $GITHUB_PATH
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build \
+            libgl1-mesa-dev libfontconfig1-dev libfreetype6-dev \
+            libx11-dev libxext-dev libxfixes-dev libxi-dev \
+            libxrender-dev libxcb1-dev python3-pip
+      
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.5.0'
+          host: 'linux'
+          target: 'desktop'
+          arch: 'gcc_64'
+          modules: 'qtserialport'
+          set-env: 'true'
+          aqtversion: '==3.2.*'
 
       - name: Create build directory
-        run: cd nwss-cnc && mkdir build
+        run: mkdir -p nwss-cnc/build
 
       - name: Configure CMake
         working-directory: ./nwss-cnc/build
@@ -217,45 +155,21 @@ jobs:
         working-directory: ./nwss-cnc/build
         run: cmake --build . --target package_for_github
       
-      - name: Create AppImage (Ubuntu only)
-        if: matrix.distro == 'ubuntu-22.04'
-        working-directory: ./nwss-cnc/build
-        run: |
-          apt-get install -y libfuse2 fuse
-          mkdir -p AppDir/usr/bin AppDir/usr/lib AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
-          cp NWSS-CNC AppDir/usr/bin/
-          cp -r ../resources/icons/nwss-cnc-icon.png AppDir/usr/share/icons/hicolor/256x256/apps/
-          
-          # Create desktop file
-          cat > AppDir/usr/share/applications/nwss-cnc.desktop << EOF
-          [Desktop Entry]
-          Type=Application
-          Name=NWSS CNC
-          Exec=NWSS-CNC
-          Icon=nwss-cnc-icon
-          Categories=Graphics;
-          EOF
-          
-          # Get AppImageTool
-          wget -c https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x appimagetool-x86_64.AppImage
-          
-          # Create AppImage
-          ./appimagetool-x86_64.AppImage AppDir NWSS-CNC-${{ matrix.artifact_suffix }}.AppImage
-      
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-package-${{ matrix.artifact_suffix }}
+          name: linux-package
           path: |
             ./nwss-cnc/build/*.deb
             ./nwss-cnc/build/*.rpm
             ./nwss-cnc/build/*.tar.gz
-            ./nwss-cnc/build/*.AppImage
   
   create-release:
     needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
+    # Add permissions for the release job
+    permissions:
+      contents: write  # This is the critical permission needed to create releases
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -280,19 +194,17 @@ jobs:
             ## Downloads
             
             ### Windows
-            - NWSS-CNC-win64.exe - Windows 64-bit Installer
-            - NWSS-CNC-win64.zip - Windows 64-bit Portable
-            - NWSS-CNC-win32.exe - Windows 32-bit Installer
-            - NWSS-CNC-win32.zip - Windows 32-bit Portable
+            - Windows 64-bit Installer (.exe)
+            - Windows 64-bit Portable (.zip)
             
             ### macOS
-            - NWSS-CNC-intel.dmg - macOS Intel
-            - NWSS-CNC-arm64.dmg - macOS Apple Silicon (M1/M2/M3)
+            - macOS Intel (intel.dmg)
+            - macOS Apple Silicon (arm64.dmg)
             
             ### Linux
-            - NWSS-CNC-ubuntu2204.AppImage - Linux AppImage (works on most distributions)
-            - NWSS-CNC-ubuntu2204.deb - Ubuntu/Debian package
-            - NWSS-CNC-debian11.deb - Debian package
+            - Ubuntu/Debian package (.deb)
+            - Red Hat/Fedora package (.rpm)
+            - Portable Linux package (.tar.gz)
             
             ## Changes in this release
             
