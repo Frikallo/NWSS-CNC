@@ -42,9 +42,29 @@ jobs:
         working-directory: ./nwss-cnc/build
         run: cmake --build . --config Release
 
-      - name: Package application
+      - name: Deploy Qt dependencies
+        working-directory: ./nwss-cnc/build/Release
+        run: |
+          # Create a deployment directory
+          mkdir -p deploy
+          
+          # Copy your executable
+          Copy-Item "NWSS-CNC.exe" -Destination "deploy/"
+          
+          # Use windeployqt to copy only required Qt DLLs
+          & "$env:Qt6_DIR\bin\windeployqt.exe" --no-translations --no-system-d3d-compiler --no-opengl-sw --no-angle --release --verbose 1 "deploy/NWSS-CNC.exe"
+          
+          # Create a ZIP package
+          Compress-Archive -Path "deploy/*" -DestinationPath "NWSS-CNC-win64.zip"
+      
+      - name: Package with NSIS (optional)
         working-directory: ./nwss-cnc/build
-        run: cmake --build . --target package_for_github
+        run: |
+          # Run the NSIS packaging - this should be configured to use the "deploy" folder content
+          cmake --build . --target package_for_github
+          
+          # Rename installer for clarity
+          Get-ChildItem -Path "." -Filter "*.exe" | Rename-Item -NewName {$_.BaseName + "-win64" + $_.Extension}
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

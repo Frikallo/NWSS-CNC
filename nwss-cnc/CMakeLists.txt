@@ -112,13 +112,47 @@ set(RESOURCES
 
 # Windows specific configuration
 if(WIN32)
-    # Windows icon and resources
-    configure_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/app.rc.in
-        ${CMAKE_CURRENT_BINARY_DIR}/app.rc
-        @ONLY
+    # Add Windows-specific icon resources
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/app.rc")
+        set(PLATFORM_SOURCES 
+            "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/app.rc"
+        )
+    endif()
+    
+    # Instruct CMake to create a smaller footprint
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:WINDOWS")
+    
+    # Ensure all DLLs are copied to executable directory
+    set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ".")
+    include(InstallRequiredSystemLibraries)
+    
+    # Configure installer options
+    set(CPACK_GENERATOR "NSIS;ZIP")
+    set(CPACK_PACKAGE_FILE_NAME "NWSS-CNC-${PROJECT_VERSION}-win64")
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "NWSS-CNC")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    set(CPACK_NSIS_MODIFY_PATH OFF)
+    
+    # Only include necessary files in the installer
+    install(TARGETS nwss-cnc
+        RUNTIME DESTINATION "."
+        COMPONENT Runtime
     )
-    set(PLATFORM_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/app.rc)
+    
+    # Custom target to run windeployqt as a post-build step
+    add_custom_command(TARGET nwss-cnc POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E echo "Running windeployqt..."
+        COMMAND "${QT_ROOT_DIR}/bin/windeployqt.exe" 
+                --no-translations 
+                --no-system-d3d-compiler 
+                --no-opengl-sw 
+                --no-angle 
+                --release 
+                --verbose 1
+                "$<TARGET_FILE:nwss-cnc>"
+        COMMENT "Deploying Qt dependencies..."
+    )
 endif()
 
 # macOS specific configuration
