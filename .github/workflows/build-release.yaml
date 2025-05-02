@@ -19,7 +19,7 @@ jobs:
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2019_64'
-          modules: 'qtbase qtsvg qtserialport'  # Empty to avoid errors
+          modules: 'qtserialport'
           set-env: 'true'
           aqtversion: '==3.2.*'
 
@@ -63,7 +63,7 @@ jobs:
           host: 'mac'
           target: 'desktop'
           arch: 'clang_64'
-          modules: 'qtbase qtsvg qtserialport'  # Empty to avoid errors
+          modules: 'qtserialport'
           set-env: 'true'
           aqtversion: '==3.2.*'
 
