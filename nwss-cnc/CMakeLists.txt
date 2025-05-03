@@ -253,7 +253,7 @@ if(WIN32)
     # Custom target to run windeployqt as a post-build step
     add_custom_command(TARGET nwss-cnc POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E echo "Running windeployqt..."
-        COMMAND "${QT_ROOT_DIR}/bin/windeployqt.exe" 
+        COMMAND "${Qt6_DIR}/bin/windeployqt.exe" 
                 --no-translations 
                 --no-system-d3d-compiler 
                 --no-opengl-sw 
