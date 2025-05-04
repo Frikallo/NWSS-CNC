@@ -153,6 +153,28 @@ QString SvgToGCode::convertSvgToGCode(
     
     // Total time
     qDebug() << "Total SVG to GCode conversion took" << totalTimer.elapsed() << "ms";
+
+    // Calculate and store time estimate
+    m_timeEstimate.rapidTime = 0;
+    m_timeEstimate.cuttingTime = 0;
+    m_timeEstimate.totalTime = 0;
+    m_timeEstimate.totalDistance = 0;
+    m_timeEstimate.rapidDistance = 0;
+    m_timeEstimate.cuttingDistance = 0;
+    
+    // Calculate time estimate using the GCodeGenerator
+    nwss::cnc::GCodeGenerator::TimeEstimate estimate = gCodeGen.calculateTimeEstimate(allPaths);
+    
+    // Convert to our struct format
+    m_timeEstimate.rapidTime = estimate.rapidTime;
+    m_timeEstimate.cuttingTime = estimate.cuttingTime;
+    m_timeEstimate.totalTime = estimate.totalTime;
+    m_timeEstimate.totalDistance = estimate.totalDistance;
+    m_timeEstimate.rapidDistance = estimate.rapidDistance;
+    m_timeEstimate.cuttingDistance = estimate.cuttingDistance;
+    
+    qDebug() << "Time estimate: " << m_timeEstimate.totalTime << " seconds ("
+             << m_timeEstimate.totalTime / 60.0 << " minutes)";
     
     return gCodeString;
 }

@@ -51,6 +51,15 @@ class GCodeGenerator {
 public:
     GCodeGenerator();
     ~GCodeGenerator();
+
+    struct TimeEstimate {
+        double rapidTime;     // Time for rapid moves (seconds)
+        double cuttingTime;   // Time for cutting moves (seconds)
+        double totalTime;     // Total time (seconds)
+        double totalDistance; // Total travel distance (in configured units)
+        double rapidDistance; // Distance of rapid moves
+        double cuttingDistance; // Distance of cutting moves
+    };
     
     /**
      * Set the CNC configuration
@@ -78,6 +87,13 @@ public:
      * @return A string containing the generated G-code
      */
     std::string generateGCodeString(const std::vector<Path>& paths) const;
+
+    /**
+     * Calculate time estimates for the given paths
+     * @param paths The discretized paths to estimate time for
+     * @return A TimeEstimate structure with the calculated times
+     */
+     TimeEstimate calculateTimeEstimate(const std::vector<Path>& paths) const;
     
 private:
     CNConfig m_config;            // CNC machine configuration

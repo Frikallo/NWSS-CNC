@@ -227,5 +227,87 @@ void GCodeGenerator::writePath(std::ostream& out, const Path& path, size_t pathI
     out << std::endl;
 }
 
+GCodeGenerator::TimeEstimate GCodeGenerator::calculateTimeEstimate(const std::vector<Path>& paths) const {
+    TimeEstimate estimate;
+    estimate.rapidTime = 0.0;
+    estimate.cuttingTime = 0.0;
+    estimate.totalTime = 0.0;
+    estimate.totalDistance = 0.0;
+    estimate.rapidDistance = 0.0;
+    estimate.cuttingDistance = 0.0;
+    
+    // Get feed rates from config
+    double feedRate = m_config.getFeedRate();      // Units per minute
+    double plungeRate = m_config.getPlungeRate();  // Units per minute
+    double rapidRate = 3000.0;                     // Default rapid rate (units per minute)
+    
+    // Convert to units per second for calculations
+    double feedRatePerSec = feedRate / 60.0;
+    double plungeRatePerSec = plungeRate / 60.0;
+    double rapidRatePerSec = rapidRate / 60.0;
+    
+    // Number of passes needed
+    int passCount = m_config.getPassCount();
+    
+    // Process each path
+    for (size_t pathIndex = 0; pathIndex < paths.size(); pathIndex++) {
+        const auto& path = paths[pathIndex];
+        if (path.empty()) continue;
+        
+        const auto& points = path.getPoints();
+        
+        // Calculate for each pass
+        for (int pass = 0; pass < passCount; pass++) {
+            // Initial plunge time - from safe height to cutting depth
+            double passDepth = m_config.getCutDepth() * (pass + 1);
+            double plungeDistance = passDepth;
+            double plungeTime = plungeDistance / plungeRatePerSec;
+            estimate.cuttingTime += plungeTime;
+            
+            // Initial rapid move to the start point (first pass only)
+            if (pass == 0 && pathIndex > 0) {
+                // Calculate distance from previous path's end point to current path's start point
+                const auto& prevPath = paths[pathIndex - 1];
+                if (!prevPath.empty()) {
+                    const auto& prevEndPoint = prevPath.getPoints().back();
+                    const auto& currentStartPoint = points.front();
+                    
+                    double dx = currentStartPoint.x - prevEndPoint.x;
+                    double dy = currentStartPoint.y - prevEndPoint.y;
+                    double moveDistance = std::sqrt(dx*dx + dy*dy);
+                    
+                    estimate.rapidDistance += moveDistance;
+                    estimate.rapidTime += moveDistance / rapidRatePerSec;
+                }
+            }
+            
+            // Add up all segment lengths
+            for (size_t i = 1; i < points.size(); i++) {
+                const auto& p1 = points[i-1];
+                const auto& p2 = points[i];
+                
+                double dx = p2.x - p1.x;
+                double dy = p2.y - p1.y;
+                double distance = std::sqrt(dx*dx + dy*dy);
+                
+                estimate.cuttingDistance += distance;
+                estimate.cuttingTime += distance / feedRatePerSec;
+            }
+            
+            // Retract time - from cutting depth to safe height
+            double retractDistance = m_config.getSafeHeight() + passDepth;
+            double retractTime = retractDistance / rapidRatePerSec;
+            estimate.rapidTime += retractTime;
+            estimate.rapidDistance += retractDistance;
+        }
+    }
+    
+    // Calculate totals
+    estimate.totalDistance = estimate.rapidDistance + estimate.cuttingDistance;
+    estimate.totalTime = estimate.rapidTime + estimate.cuttingTime;
+    
+    return estimate;
+}
+
 } // namespace cnc
 } // namespace nwss

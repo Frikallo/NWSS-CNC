@@ -91,6 +91,7 @@ private:
     QAction *aboutQtAct;
     QAction *showMachinePanelAct;
     QAction *showGCodeOptionsPanelAct;
+    QLabel *timeEstimateLabel;
 };
 
 #endif // MAINWINDOW_H

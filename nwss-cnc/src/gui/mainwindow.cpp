@@ -304,6 +304,13 @@ void MainWindow::createDockPanels()
 
 void MainWindow::createStatusBar()
 {
+    // Create time estimate label
+    timeEstimateLabel = new QLabel(tr("Est. time: --:--:--"));
+    timeEstimateLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    timeEstimateLabel->setContentsMargins(5, 0, 5, 0);
+    timeEstimateLabel->setMinimumWidth(150);
+    
+    statusBar()->addPermanentWidget(timeEstimateLabel);
     statusBar()->showMessage(tr("Ready"));
 }
 
@@ -558,6 +565,23 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
                             .arg(svgToGCode->lastError()));
         return;
     }
+    
+    // Get the time estimate
+    auto timeEstimate = svgToGCode->getTimeEstimate();
+    
+    // Format time as HH:MM:SS
+    int totalSeconds = static_cast<int>(timeEstimate.totalTime);
+    int hours = totalSeconds / 3600;
+    int minutes = (totalSeconds % 3600) / 60;
+    int seconds = totalSeconds % 60;
+    
+    QString timeString = QString("%1:%2:%3")
+                          .arg(hours, 2, 10, QChar('0'))
+                          .arg(minutes, 2, 10, QChar('0'))
+                          .arg(seconds, 2, 10, QChar('0'));
+    
+    // Update time estimate label
+    timeEstimateLabel->setText(tr("Est. time: %1").arg(timeString));
     
     // Update the GCode editor with the generated code
     gCodeEditor->setPlainText(gcode);
