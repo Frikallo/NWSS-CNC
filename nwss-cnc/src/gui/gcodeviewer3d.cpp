@@ -9,7 +9,7 @@ GCodeViewer3D::GCodeViewer3D(QWidget *parent)
       gridVbo(QOpenGLBuffer::VertexBuffer),
       pathVbo(QOpenGLBuffer::VertexBuffer),
       cameraPosition(0.0f, 0.0f, 0.0f),
-      cameraTarget(0.0f, 0.0f, 0.0f),  // Always keep target at origin by default
+      cameraTarget(0.0f, 0.0f, 0.0f),
       scale(0.5f),
       minBounds(-50.0f, -50.0f, -50.0f),
       maxBounds(50.0f, 50.0f, 50.0f),
@@ -21,7 +21,7 @@ GCodeViewer3D::GCodeViewer3D(QWidget *parent)
       m_isDraggingCube(false),
       m_isAnimating(false),
       m_animationProgress(0.0f),
-      m_animationDuration(0.5f), // 500ms animation
+      m_animationDuration(0.5f),
       m_rotationCenter(0.0f, 0.0f, 0.0f),
       pathIndexBuffer(QOpenGLBuffer::IndexBuffer),
       useIndexedRendering(true),
@@ -32,14 +32,19 @@ GCodeViewer3D::GCodeViewer3D(QWidget *parent)
       m_useSimplifiedGeometry(true),
       m_simplificationFactor(1),
       m_lastScale(1.0f),
-      m_pathGeometryNeedsRebuilding(false)
+      m_pathGeometryNeedsRebuilding(false),
+      // New performance variables
+      m_skipRenderDuringNavigation(true),
+      m_needsCompleteRedraw(true),
+      m_fps(0.0f),
+      m_frameCount(0)
 {
     setFocusPolicy(Qt::StrongFocus);
     
     // Initialize with identity quaternions
     m_cubeOrientation = QQuaternion();
     m_viewOrientation = QQuaternion();
-    
+
     // Set up a timer to handle batched updates
     updateTimer = new QTimer(this);
     updateTimer->setSingleShot(true);
@@ -57,6 +62,19 @@ GCodeViewer3D::GCodeViewer3D(QWidget *parent)
     // Set up animation timer for view transitions
     m_animationTimer = new QTimer(this);
     connect(m_animationTimer, &QTimer::timeout, this, &GCodeViewer3D::updateAnimation);
+    
+    // Frame rate limiter
+    m_frameRateLimiter = new QTimer(this);
+    m_frameRateLimiter->setInterval(1000 / TARGET_FPS);
+    connect(m_frameRateLimiter, &QTimer::timeout, this, [this]() {
+        if (m_needsCompleteRedraw) {
+            update();
+        }
+    });
+    m_frameRateLimiter->start();
+    
+    // Initialize navigation timer
+    m_navigationTimer.start();
 }
 
 GCodeViewer3D::~GCodeViewer3D()
@@ -983,7 +1001,12 @@ void GCodeViewer3D::resizeGL(int width, int height)
 }
 
 void GCodeViewer3D::paintGL()
-{
+{   
+    // Skip detail rendering during fast navigation
+    bool reduceDetail = false;
+    m_frameSkipCount = 0;
+    m_needsCompleteRedraw = true;
+    
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
     // Use the viewDirection with the rotation center as reference
@@ -999,11 +1022,13 @@ void GCodeViewer3D::paintGL()
     // Apply rotation to the model matrix instead
     model.setToIdentity();
     
+    // Always draw the grid (fast)
     drawGrid();
     
-    // Only draw tool path if it exists
-    if (hasValidToolPath) {
+    // Only draw tool path if it exists and we're not skipping details
+    if (hasValidToolPath && (!reduceDetail || m_needsCompleteRedraw)) {
         drawToolPath();
+        m_needsCompleteRedraw = false;
     }
     
     // After all OpenGL rendering, switch to painter for the UI elements
@@ -1133,25 +1158,47 @@ void GCodeViewer3D::rebuildGeometryForCurrentLOD()
         return;
     }
     
-    // Decide LOD based on scale
+    // Decide LOD based on scale and path complexity
+    // The calculation is now more sophisticated
     m_simplificationFactor = 1; // Default: use all points
     
     // Adapt LOD based on current scale and point count
-    if (m_useSimplifiedGeometry && toolPath.size() > 1000) {
-        if (scale < 0.1f) {
-            m_simplificationFactor = std::min(50, static_cast<int>(toolPath.size() / 1000));
-        } else if (scale < 0.3f) {
-            m_simplificationFactor = std::min(20, static_cast<int>(toolPath.size() / 2000));
-        } else if (scale < 0.5f) {
-            m_simplificationFactor = std::min(10, static_cast<int>(toolPath.size() / 5000));
-        } else if (scale < 0.8f) {
-            m_simplificationFactor = std::min(5, static_cast<int>(toolPath.size() / 10000));
-        } else {
-            m_simplificationFactor = 1;
+    if (m_useSimplifiedGeometry) {
+        int pathSize = static_cast<int>(toolPath.size());
+        
+        if (pathSize > 500000) {
+            // Ultra-large models - very aggressive simplification
+            if (scale < 0.1f) m_simplificationFactor = 200;
+            else if (scale < 0.3f) m_simplificationFactor = 100;
+            else if (scale < 0.5f) m_simplificationFactor = 50;
+            else if (scale < 0.8f) m_simplificationFactor = 20;
+            else m_simplificationFactor = 10;
+        }
+        else if (pathSize > 100000) {
+            // Very large models
+            if (scale < 0.1f) m_simplificationFactor = 100;
+            else if (scale < 0.3f) m_simplificationFactor = 50;
+            else if (scale < 0.5f) m_simplificationFactor = 20;
+            else if (scale < 0.8f) m_simplificationFactor = 10;
+            else m_simplificationFactor = 5;
+        }
+        else if (pathSize > 20000) {
+            // Large models
+            if (scale < 0.1f) m_simplificationFactor = 50;
+            else if (scale < 0.3f) m_simplificationFactor = 20;
+            else if (scale < 0.5f) m_simplificationFactor = 10;
+            else if (scale < 0.8f) m_simplificationFactor = 5;
+            else m_simplificationFactor = 2;
+        }
+        else if (pathSize > 5000) {
+            // Medium models
+            if (scale < 0.1f) m_simplificationFactor = 20;
+            else if (scale < 0.3f) m_simplificationFactor = 10;
+            else if (scale < 0.5f) m_simplificationFactor = 5;
+            else if (scale < 0.8f) m_simplificationFactor = 2;
+            else m_simplificationFactor = 1;
         }
     }
-    
-    qDebug() << "LOD Simplification factor:" << m_simplificationFactor << "Scale:" << scale;
     
     // Create simplified path using LOD
     m_simplifiedToolPath.clear();
@@ -1165,27 +1212,38 @@ void GCodeViewer3D::rebuildGeometryForCurrentLOD()
         // Simplified approach: keep important points (direction changes)
         float epsilon = 0.5f * m_simplificationFactor; // Tolerance increases with simplification
         
+        // First pass: mark key points (important direction changes and type changes)
+        std::vector<bool> isKeyPoint(toolPath.size(), false);
+        isKeyPoint[0] = true; // First point
+        isKeyPoint[toolPath.size() - 1] = true; // Last point
+        
         for (size_t i = 1; i < toolPath.size() - 1; i++) {
-            bool isKeyPoint = false;
-            
             // Always include points where the movement type changes
             if (toolPath[i].isRapid != toolPath[i-1].isRapid) {
-                isKeyPoint = true;
-            } 
-            // Always include significant direction changes
-            else {
-                QVector3D v1 = (toolPath[i].position - toolPath[i-1].position).normalized();
-                QVector3D v2 = (toolPath[i+1].position - toolPath[i].position).normalized();
-                float dot = QVector3D::dotProduct(v1, v2);
-                
-                // If direction change is significant
-                if (dot < 0.95f) {
-                    isKeyPoint = true;
-                }
+                isKeyPoint[i] = true;
+                continue;
             }
             
-            // Include point if it's a key point or based on simplification factor
-            if (isKeyPoint || i % m_simplificationFactor == 0) {
+            // Check for significant direction changes
+            QVector3D v1 = (toolPath[i].position - toolPath[i-1].position).normalized();
+            QVector3D v2 = (toolPath[i+1].position - toolPath[i].position).normalized();
+            float dot = QVector3D::dotProduct(v1, v2);
+            
+            // Mark significant direction changes as key points
+            if (dot < 0.98f - 0.02f * m_simplificationFactor) { // Adaptive threshold based on LOD
+                isKeyPoint[i] = true;
+                continue;
+            }
+            
+            // Include some points based on simplification factor
+            if (i % m_simplificationFactor == 0) {
+                isKeyPoint[i] = true;
+            }
+        }
+        
+        // Second pass: add all key points to simplified path
+        for (size_t i = 1; i < toolPath.size() - 1; i++) {
+            if (isKeyPoint[i]) {
                 m_simplifiedToolPath.push_back(toolPath[i]);
             }
         }
@@ -1200,8 +1258,6 @@ void GCodeViewer3D::rebuildGeometryForCurrentLOD()
     if (m_simplifiedToolPath.back().position != toolPath.back().position) {
         m_simplifiedToolPath.push_back(toolPath.back());
     }
-    
-    qDebug() << "Simplified from" << toolPath.size() << "to" << m_simplifiedToolPath.size() << "points";
     
     // Now create separate index arrays for rapid and cutting moves
     m_indicesRapid.clear();
@@ -1231,9 +1287,6 @@ void GCodeViewer3D::rebuildGeometryForCurrentLOD()
     m_cuttingIndexCount = m_indicesCutting.size();
     m_rapidIndexOffset = 0;
     m_cuttingIndexOffset = m_rapidIndexCount * sizeof(int);
-    
-    qDebug() << "Created" << m_rapidIndexCount/2 << "rapid segments and" 
-             << m_cuttingIndexCount/2 << "cutting segments";
     
     // Remember the scale we built this for
     m_lastScale = scale;
@@ -1412,6 +1465,9 @@ void GCodeViewer3D::mousePressEvent(QMouseEvent *event)
 
 void GCodeViewer3D::mouseMoveEvent(QMouseEvent *event)
 {
+    // Reset navigation timer at the start of movement
+    m_navigationTimer.restart();
+    
     // Performance optimization for large models: reduce operations during dragging
     static QElapsedTimer dragTimer;
     static bool isDraggingView = false;
@@ -1461,7 +1517,7 @@ void GCodeViewer3D::mouseMoveEvent(QMouseEvent *event)
         m_lastCubeDragPos = event->pos();
         event->accept();
         
-        // Always update after a drag
+        // Update immediately
         update();
         return;
     } else if (event->buttons() & Qt::LeftButton) {
@@ -1508,8 +1564,9 @@ void GCodeViewer3D::mouseMoveEvent(QMouseEvent *event)
         cameraTarget += movement;
         m_rotationCenter += movement; // Move the rotation center when panning
         
-        // During drag - only update UI at 30fps max to reduce CPU strain
-        if (dragTimer.elapsed() > 33) { // ~30 fps
+        // During drag - allow more time between updates for large models
+        // This is a key optimization to reduce CPU/GPU load during panning
+        if (dragTimer.elapsed() > 33) { // ~30 fps max during panning
             update();
             dragTimer.restart();
         }
@@ -1592,8 +1649,11 @@ void GCodeViewer3D::mouseReleaseEvent(QMouseEvent *event)
             }
             
             event->accept();
+        } else {
+            // Force a full quality redraw on mouse release
+            m_needsCompleteRedraw = true;
+            update();
         }
-        // We don't do anything on a regular mouse release - camera stays where it is
     }
 }
 
@@ -1613,24 +1673,9 @@ void GCodeViewer3D::wheelEvent(QWheelEvent *event)
     // Expanded zoom range
     if (scale < 0.001f) scale = 0.001f; // Allow much closer zoom
     if (scale > 50.0f) scale = 50.0f;   // Allow much further zoom out
-    
-    // Check if scale changed enough to warrant LOD update
-    float ratio = scale / oldScale;
-    if (ratio < 0.8f || ratio > 1.25f) {
-        // Scale changed enough to update LOD
-        if (hasValidToolPath && m_useSimplifiedGeometry) {
-            m_pathGeometryNeedsRebuilding = true;
-            
-            // If zooming out fast, update immediately
-            if (ratio < 0.7f) {
-                rebuildGeometryForCurrentLOD();
-                makePathVertices();
-            } else {
-                // Otherwise, schedule update
-                updateTimer->start(50);
-            }
-        }
-    }
+
+    rebuildGeometryForCurrentLOD();
+    makePathVertices();
     
     update();
 }

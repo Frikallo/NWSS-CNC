@@ -13,6 +13,7 @@
 #include <QString>
 #include <QTimer>
 #include <QPainter>
+#include <QElapsedTimer>
 #include <vector>
 #include <QQuaternion>
 
@@ -55,6 +56,13 @@ private:
     void autoScaleToFit();
     void setIsometricView();
     
+    // FPS related methods and variables
+    void updateFPS();
+    void drawFPSCounter(QPainter* painter);
+    QElapsedTimer m_fpsTimer;
+    float m_fps;
+    int m_frameCount;
+    
     // Navigation cube methods
     void initViewCube();
     void drawViewCube(QPainter* painter);
@@ -71,10 +79,10 @@ private:
     void animateToViewDirection(const QVector3D& direction);
 
     bool m_useBufferSubData;        // Use more efficient buffer updates
-    int m_visiblePointCount = 0;         // Track visible points
+    int m_visiblePointCount = 0;    // Track visible points
     std::vector<int> m_pathSegments; // Track where paths start/end
-    float m_viewportScale;           // Current viewport scale for LOD
-    QVector3D m_viewportCenter;      // Current viewport center for culling
+    float m_viewportScale;          // Current viewport scale for LOD
+    QVector3D m_viewportCenter;     // Current viewport center for culling
     std::vector<int> m_segmentTypes;
     
     // New optimization-related methods
@@ -84,6 +92,12 @@ private:
                                std::vector<float>& outVertices,
                                float simplificationFactor);
     bool isPointVisible(const QVector3D& point);
+    
+    // Performance optimizations
+    bool m_skipRenderDuringNavigation; // Skip full rendering during navigation
+    int m_frameSkipCount;             // Skip frames during rapid movement
+    bool m_needsCompleteRedraw;       // Flag for complete redraw
+    QElapsedTimer m_navigationTimer;  // Timer for navigation performance
     
     QOpenGLShaderProgram gridProgram;
     QOpenGLShaderProgram pathProgram;
@@ -171,6 +185,10 @@ private:
     std::vector<int> m_indicesCutting;
     void rebuildGeometryForCurrentLOD();
     GCodePoint interpolatePoints(const GCodePoint& a, const GCodePoint& b, float t);
+    
+    // Frame rate limiting
+    QTimer* m_frameRateLimiter;
+    static const int TARGET_FPS = 60;
 };
 
 #endif // GCODEVIEWER3D_H
