@@ -30,6 +30,7 @@ jobs:
       
       - name: Configure and Build
         run: |
+          cd nwss-cnc
           mkdir -p build
           cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
@@ -41,8 +42,8 @@ jobs:
         with:
           name: windows-package-x64
           path: |
-            ./build/*.zip
-            ./build/*.exe
+            ./nwss-cnc/build/*.zip
+            ./nwss-cnc/build/*.exe
   
   build-macos:
     name: Build macOS
@@ -72,6 +73,7 @@ jobs:
       
       - name: Configure and Build
         run: |
+          cd nwss-cnc
           mkdir -p build
           cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release \
@@ -81,7 +83,7 @@ jobs:
           cmake --build . --target package_for_github
       
       - name: Rename artifacts for clarity
-        working-directory: ./build
+        working-directory: ./nwss-cnc/build
         run: |
           for file in *.dmg; do
             if [ -f "$file" ]; then
@@ -93,7 +95,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-package-${{ matrix.artifact_suffix }}
-          path: ./build/*.dmg
+          path: ./nwss-cnc/build/*.dmg
   
   build-linux:
     name: Build Linux (Ubuntu)
@@ -121,6 +123,7 @@ jobs:
       
       - name: Configure and Build
         run: |
+          cd nwss-cnc
           mkdir -p build
           cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$Qt6_DIR"
@@ -132,9 +135,9 @@ jobs:
         with:
           name: linux-package
           path: |
-            ./build/*.deb
-            ./build/*.rpm
-            ./build/*.tar.gz
+            ./nwss-cnc/build/*.deb
+            ./nwss-cnc/build/*.rpm
+            ./nwss-cnc/build/*.tar.gz
   
   create-release:
     needs: [build-windows, build-macos, build-linux]
