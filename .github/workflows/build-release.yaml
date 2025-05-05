@@ -37,34 +37,13 @@ jobs:
         working-directory: ./nwss-cnc/build
         run: |
           cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
-
       - name: Build application
         working-directory: ./nwss-cnc/build
         run: cmake --build . --config Release
 
-      - name: Deploy Qt dependencies
-        working-directory: ./nwss-cnc/build/Release
-        run: |
-          # Create a deployment directory
-          mkdir -p deploy
-          
-          # Copy your executable
-          Copy-Item "NWSS-CNC.exe" -Destination "deploy/"
-          
-          # Use windeployqt to copy only required Qt DLLs
-          & "$env:Qt6_DIR\bin\windeployqt.exe" --no-translations --no-system-d3d-compiler --no-opengl-sw --no-angle --release --verbose 1 "deploy/NWSS-CNC.exe"
-          
-          # Create a ZIP package
-          Compress-Archive -Path "deploy/*" -DestinationPath "NWSS-CNC-win64.zip"
-      
-      - name: Package with NSIS (optional)
+      - name: Package application
         working-directory: ./nwss-cnc/build
-        run: |
-          # Run the NSIS packaging - this should be configured to use the "deploy" folder content
-          cmake --build . --target package_for_github
-          
-          # Rename installer for clarity
-          Get-ChildItem -Path "." -Filter "*.exe" | Rename-Item -NewName {$_.BaseName + "-win64" + $_.Extension}
+        run: cmake --build . --target package_for_github
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -108,63 +87,33 @@ jobs:
       - name: Configure CMake
         working-directory: ./nwss-cnc/build
         run: |
-          # Configure with correct architecture
           cmake .. -DCMAKE_BUILD_TYPE=Release \
-                  -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
-                  -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
-                  -DCMAKE_CXX_FLAGS="-O3"
-
+                 -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
+                 -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+                 -DCMAKE_CXX_FLAGS="-O3"
       - name: Build application
         working-directory: ./nwss-cnc/build
         run: cmake --build . --config Release
 
-      - name: Print environment info
-        run: |
-          echo "Qt6_DIR: $Qt6_DIR"
-          ls -la "$Qt6_DIR/bin"
-          echo "PATH: $PATH"
-
-      - name: Deploy and Sign app
+      - name: Package application
         working-directory: ./nwss-cnc/build
-        run: |
-          # Deploy with Qt dependencies - using the full path to macdeployqt
-          "$Qt6_DIR/bin/macdeployqt" NWSS-CNC.app -always-overwrite -verbose=2
-          
-          # Sign with ad-hoc certificate for testing
-          codesign --force --options runtime --deep --sign - --entitlements ../resources/macos/entitlements.plist NWSS-CNC.app
-          
-          # Create DMG - using the full path to macdeployqt 
-          "$Qt6_DIR/bin/macdeployqt" NWSS-CNC.app -dmg -verbose=2
-          
-          # Rename DMG to include architecture
-          mv NWSS-CNC.dmg NWSS-CNC-${{ matrix.artifact_suffix }}.dmg
+        run: cmake --build . --target package_for_github
       
-      - name: Create user instructions
+      - name: Rename artifacts for clarity
         working-directory: ./nwss-cnc/build
         run: |
-          # Create a README with instructions for bypassing Gatekeeper
-          cat > NWSS-CNC-README.txt << EOF
-          NWSS-CNC for macOS ${{ matrix.display_name }}
-          --------------------------------------------
-          
-          If you receive a message that the app is damaged and can't be opened:
-          
-          Option 1: Right-click (or Control+click) on the app and select "Open" from the menu
-          
-          Option 2: Run this command in Terminal:
-          xattr -rd com.apple.quarantine /Applications/NWSS-CNC.app
-          
-          These steps are needed because the app is not signed with an Apple Developer certificate.
-          EOF
+          for file in *.dmg; do
+            if [ -f "$file" ]; then
+              mv "$file" "${file%.dmg}-${{ matrix.artifact_suffix }}.dmg"
+            fi
+          done
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-package-${{ matrix.artifact_suffix }}
-          path: |
-            ./nwss-cnc/build/*.dmg
-            ./nwss-cnc/build/NWSS-CNC-README.txt
-
+          path: ./nwss-cnc/build/*.dmg
+  
   build-linux:
     name: Build Linux (Ubuntu)
     runs-on: ubuntu-latest
@@ -200,7 +149,6 @@ jobs:
           cmake .. -DCMAKE_BUILD_TYPE=Release \
                  -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
                  -DCMAKE_CXX_FLAGS="-O3"
-
       - name: Build application
         working-directory: ./nwss-cnc/build
         run: cmake --build . --config Release
