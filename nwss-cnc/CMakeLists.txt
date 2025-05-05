@@ -1,12 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(nwss-cnc VERSION 1.0.0 LANGUAGES CXX)
 
-# Set C++ standard
+# Basic project settings
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-# Qt specific configuration
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -23,43 +20,19 @@ set(APP_ICON_WINDOWS "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/nwss-cnc-icon.
 set(APP_ICON_MACOS "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/nwss-cnc-icon.icns")
 set(APP_ICON_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/nwss-cnc-icon.png")
 
-# Add math definitions for M_PI on Windows
-if(MSVC)
-    add_definitions(-D_USE_MATH_DEFINES)
-endif()
-
-# Set default build type if not specified
+# Set default build type to Release
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
 endif()
 
-# Performance optimization flags for Release mode
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    message(STATUS "Configuring release build with optimizations")
-    
-    if(MSVC)
-        # MSVC compiler flags for optimized release
-        add_compile_options(/O2 /Ob2 /GL /Gy /Gw)
-        add_link_options(/LTCG)
-        string(REPLACE "/RTC1" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
-    else()
-        # GCC/Clang compiler flags for optimized release
-        add_compile_options(-O3)
-        
-        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-            add_link_options(-flto)
-        elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-            add_link_options(-flto)
-        endif()
-    endif()
-endif()
-
-# Find required packages
+# Find Qt packages
 find_package(Qt6 COMPONENTS Core Gui Widgets OpenGLWidgets Svg SvgWidgets SerialPort REQUIRED)
 
-# Set include directories
+# Set include directories - FIX: Add individual include subdirectories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/gui
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
     ${CMAKE_CURRENT_SOURCE_DIR}  # Include root directory
 )
@@ -80,7 +53,6 @@ set(CORE_SOURCES
 add_library(nwss-cnc-core STATIC ${CORE_SOURCES})
 target_include_directories(nwss-cnc-core PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
 )
 
 # Define source files for the GUI application
@@ -91,6 +63,7 @@ set(GUI_SOURCES
     src/gui/svgviewer.cpp
     src/gui/gcodeoptionspanel.cpp
     src/gui/svgtogcode.cpp
+    src/main.cpp
 )
 
 # Define header files for the GUI application
@@ -104,83 +77,114 @@ set(GUI_HEADERS
 )
 
 # Define resources
-set(RESOURCES
-    resources/resources.qrc
-)
+set(RESOURCES resources/resources.qrc)
 
 # -------------------- Platform-specific setup --------------------
-# macOS specific configuration
-if(APPLE)
-    # Set macOS bundle icon file
-    set(MACOSX_BUNDLE_ICON_FILE "nwss-cnc-icon.icns")
-    set(APPLICATION_ICON "${APP_ICON_MACOS}")
-    set_source_files_properties(${APPLICATION_ICON}
-        PROPERTIES
-            MACOSX_PACKAGE_LOCATION "Resources"
-    )
-    
-    # Add fonts or other resources
-    set(RESOURCE_FILES 
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/JetBrainsMono-Regular.ttf"
-    )
-    foreach(FILE ${RESOURCE_FILES})
-        get_filename_component(FILENAME ${FILE} NAME)
-        set_source_files_properties(${FILE}
-            PROPERTIES
-                MACOSX_PACKAGE_LOCATION "Resources/fonts"
-        )
-    endforeach()
-endif()
 
-# Linux specific configuration
-if(UNIX AND NOT APPLE)
-    # Set Linux-specific definitions
-    add_definitions(-DLINUX_BUILD)
+# macOS configuration
+if(APPLE)
+    set(MACOSX_BUNDLE_ICON_FILE "nwss-cnc-icon.icns")
+    set_source_files_properties(${APP_ICON_MACOS} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
     
-    # Install paths for Linux
+    # Add fonts for macOS
+    set(RESOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/JetBrainsMono-Regular.ttf")
+    set_source_files_properties(${RESOURCE_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/fonts")
+    
+    add_executable(nwss-cnc MACOSX_BUNDLE 
+        ${GUI_SOURCES} 
+        ${GUI_HEADERS}
+        ${RESOURCES} 
+        ${APP_ICON_MACOS}
+        ${RESOURCE_FILES}
+    )
+    
+    set_target_properties(nwss-cnc PROPERTIES
+        MACOSX_BUNDLE TRUE
+        OUTPUT_NAME "${APP_NAME}"
+        MACOSX_BUNDLE_BUNDLE_NAME "${APP_NAME}"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "${APP_BUNDLE_IDENTIFIER}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${APP_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${APP_VERSION}"
+        MACOSX_BUNDLE_ICON_FILE "${MACOSX_BUNDLE_ICON_FILE}"
+        MACOSX_BUNDLE_COPYRIGHT "${APP_COPYRIGHT}"
+    )
+    
+    # macOS deployment
+    install(TARGETS nwss-cnc BUNDLE DESTINATION .)
+    set(CPACK_GENERATOR "DragNDrop")
+    set(CPACK_DMG_VOLUME_NAME "${APP_NAME}")
+    
+# Windows configuration
+elseif(WIN32)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/app.rc")
+        set(PLATFORM_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/app.rc")
+    endif()
+    
+    add_executable(nwss-cnc WIN32 
+        ${GUI_SOURCES} 
+        ${GUI_HEADERS}
+        ${RESOURCES} 
+        ${PLATFORM_SOURCES}
+    )
+    
+    # Windows deployment
+    set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ".")
+    include(InstallRequiredSystemLibraries)
+    
+    install(TARGETS nwss-cnc RUNTIME DESTINATION ".")
+    
+    # Run windeployqt after build
+    add_custom_command(TARGET nwss-cnc POST_BUILD
+        COMMAND "${Qt6_DIR}/bin/windeployqt.exe" 
+                --no-translations 
+                --release 
+                "$<TARGET_FILE:nwss-cnc>"
+        COMMENT "Deploying Qt dependencies..."
+    )
+    
+    set(CPACK_GENERATOR "ZIP;NSIS")
+    set(CPACK_PACKAGE_FILE_NAME "NWSS-CNC-${PROJECT_VERSION}-win64")
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "NWSS-CNC")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    
+# Linux configuration
+else()
+    add_executable(nwss-cnc 
+        ${GUI_SOURCES} 
+        ${GUI_HEADERS}
+        ${RESOURCES}
+    )
+    
+    # Linux deployment
     include(GNUInstallDirs)
-    set(LINUX_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
-    set(LINUX_RESOURCE_DIR ${CMAKE_INSTALL_DATAROOTDIR}/${APP_NAME})
+    install(TARGETS nwss-cnc RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
     
-    # Configure .desktop file for Linux
+    # Install icon and desktop file
     configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/resources/linux/nwss-cnc.desktop.in
         ${CMAKE_CURRENT_BINARY_DIR}/nwss-cnc.desktop
         @ONLY
     )
+    
+    install(FILES "${APP_ICON_LINUX}"
+        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/256x256/apps"
+        RENAME "${APP_NAME}.png"
+    )
+    
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/nwss-cnc.desktop"
+        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications"
+    )
+    
+    # Install fonts for Linux
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/"
+        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/${APP_NAME}/fonts"
+    )
+    
+    set(CPACK_GENERATOR "TGZ;DEB;RPM")
 endif()
 
-# -------------------- Create Executable --------------------
-
-# Create the main executable with platform-specific setup
-if(APPLE)
-    add_executable(nwss-cnc MACOSX_BUNDLE
-        src/main.cpp
-        ${GUI_SOURCES}
-        ${GUI_HEADERS}
-        ${RESOURCES}
-        ${APPLICATION_ICON}
-        ${EXAMPLE_FILES}
-        ${RESOURCE_FILES}
-    )
-elseif(WIN32)
-    add_executable(nwss-cnc WIN32
-        src/main.cpp
-        ${GUI_SOURCES}
-        ${GUI_HEADERS}
-        ${RESOURCES}
-        ${PLATFORM_SOURCES}
-    )
-else() # Linux
-    add_executable(nwss-cnc
-        src/main.cpp
-        ${GUI_SOURCES}
-        ${GUI_HEADERS}
-        ${RESOURCES}
-    )
-endif()
-
-# Link libraries
+# Link libraries for the main executable
 target_link_libraries(nwss-cnc PRIVATE
     nwss-cnc-core
     Qt6::Core
@@ -192,179 +196,19 @@ target_link_libraries(nwss-cnc PRIVATE
     Qt6::SerialPort
 )
 
-# Include directories for GUI
-target_include_directories(nwss-cnc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/gui)
+# Add additional include directories for the main executable
+target_include_directories(nwss-cnc PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/gui
+)
 
-# -------------------- Set Properties --------------------
-
-# Set application properties
-if(APPLE)
-    set(CPACK_GENERATOR "DragNDrop")
-    set_target_properties(nwss-cnc PROPERTIES
-        MACOSX_BUNDLE TRUE
-        OUTPUT_NAME "${APP_NAME}"
-        MACOSX_BUNDLE_BUNDLE_NAME "${APP_NAME}"
-        MACOSX_BUNDLE_GUI_IDENTIFIER "${APP_BUNDLE_IDENTIFIER}"
-        MACOSX_BUNDLE_BUNDLE_VERSION "${APP_VERSION}"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "${APP_VERSION}"
-        MACOSX_BUNDLE_ICON_FILE "${MACOSX_BUNDLE_ICON_FILE}"
-        MACOSX_BUNDLE_COPYRIGHT "${APP_COPYRIGHT}"
-        RESOURCE "${RESOURCE_FILES}"
-        XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME YES
-    )
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/entitlements.plist"
-            DESTINATION "${CMAKE_INSTALL_PREFIX}/NWSS-CNC.app/Contents/Resources"
-            COMPONENT Runtime)
-else()
-    set_target_properties(nwss-cnc PROPERTIES
-        OUTPUT_NAME "${APP_NAME}"
-    )
-endif()
-
-if(WIN32)
-    # Add Windows-specific icon resources
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/app.rc")
-        set(PLATFORM_SOURCES 
-            "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/app.rc"
-        )
-    endif()
-    
-    # Instruct CMake to create a smaller footprint
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:WINDOWS")
-    
-    # Ensure all DLLs are copied to executable directory
-    set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
-    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ".")
-    include(InstallRequiredSystemLibraries)
-    
-    # Configure installer options
-    set(CPACK_GENERATOR "NSIS;ZIP")
-    set(CPACK_PACKAGE_FILE_NAME "NWSS-CNC-${PROJECT_VERSION}-win64")
-    set(CPACK_PACKAGE_INSTALL_DIRECTORY "NWSS-CNC")
-    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
-    set(CPACK_NSIS_MODIFY_PATH OFF)
-    
-    # Only include necessary files in the installer
-    install(TARGETS nwss-cnc
-        RUNTIME DESTINATION "."
-        COMPONENT Runtime
-    )
-    
-    # Custom target to run windeployqt as a post-build step
-    add_custom_command(TARGET nwss-cnc POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E echo "Running windeployqt..."
-        COMMAND "${Qt6_DIR}/bin/windeployqt.exe" 
-                --no-translations 
-                --no-system-d3d-compiler 
-                --no-opengl-sw 
-                --no-angle 
-                --release 
-                --verbose 1
-                "$<TARGET_FILE:nwss-cnc>"
-        COMMENT "Deploying Qt dependencies..."
-    )
-endif()
-
-# -------------------- Packaging Setup --------------------
-
-# Setup for CPack to create redistributable packages
+# Setup packaging
 include(CPack)
 set(CPACK_PACKAGE_NAME "${APP_NAME}")
 set(CPACK_PACKAGE_VENDOR "${APP_COMPANY}")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "NWSS CNC - SVG to G-Code Converter")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "NWSS CNC Software")
 set(CPACK_PACKAGE_VERSION "${APP_VERSION}")
-set(CPACK_PACKAGE_INSTALL_DIRECTORY "${APP_NAME}")
 
-# Platform-specific packaging configuration
-if(WIN32)
-    # Windows installer settings
-    set(CPACK_GENERATOR "ZIP;NSIS")
-    set(CPACK_NSIS_PACKAGE_NAME "${APP_NAME}")
-    set(CPACK_NSIS_DISPLAY_NAME "${APP_NAME}")
-    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
-    set(CPACK_NSIS_MODIFY_PATH OFF)
-    set(CPACK_NSIS_MUI_ICON "${APP_ICON_WINDOWS}")
-    set(CPACK_NSIS_MUI_UNIICON "${APP_ICON_WINDOWS}")
-    
-    # Add Windows example files to the package
-    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/example_files/"
-        DESTINATION "example_files"
-        COMPONENT Runtime
-    )
-    
-    # Add Windows DLL dependencies
-    install(CODE [[
-        file(GET_RUNTIME_DEPENDENCIES
-            EXECUTABLES $<TARGET_FILE:nwss-cnc>
-            RESOLVED_DEPENDENCIES_VAR RESOLVED_DEPS
-            UNRESOLVED_DEPENDENCIES_VAR UNRESOLVED_DEPS
-        )
-        foreach(DLL ${RESOLVED_DEPS})
-            file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}" TYPE SHARED_LIBRARY FILES "${DLL}")
-        endforeach()
-    ]] COMPONENT Runtime)
-elseif(APPLE)
-    # macOS DMG settings
-    set(CPACK_DMG_VOLUME_NAME "${APP_NAME}")
-    set(CPACK_DMG_FORMAT "UDBZ") # bzip2 compressed disk image
-    set(CPACK_DMG_DS_STORE_SETUP_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/DMGSetup.scpt")
-    set(CPACK_APPLE_BUNDLE_ID "${APP_BUNDLE_IDENTIFIER}")
-    
-    set(CPACK_POST_BUILD_SCRIPTS "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/macos_fixup.cmake")
-elseif(UNIX)
-    # Linux packaging
-    set(CPACK_GENERATOR "TGZ;DEB;RPM")
-    
-    # DEB package settings
-    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${APP_COMPANY}")
-    set(CPACK_DEBIAN_PACKAGE_SECTION "graphics")
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, libqt6core6, libqt6gui6, libqt6widgets6, libqt6svg6, libqt6serialport6")
-    
-    # RPM package settings
-    set(CPACK_RPM_PACKAGE_LICENSE "Proprietary")
-    set(CPACK_RPM_PACKAGE_GROUP "Applications/Graphics")
-    set(CPACK_RPM_PACKAGE_REQUIRES "qt6-qtbase, qt6-qtsvg, qt6-qtserialport")
-    
-    # Install Linux icon and desktop file
-    install(FILES "${APP_ICON_LINUX}"
-        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/256x256/apps"
-        RENAME "${APP_NAME}.png"
-    )
-    
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/nwss-cnc.desktop"
-        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications"
-    )
-    
-    # Install Linux example files
-    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/example_files/"
-        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/${APP_NAME}/example_files"
-        COMPONENT Runtime
-    )
-    
-    # Install Linux fonts and resources
-    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/"
-        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/${APP_NAME}/fonts"
-        COMPONENT Runtime
-    )
-endif()
-
-# Install the main application
-if(APPLE)
-    install(TARGETS nwss-cnc
-        BUNDLE DESTINATION . COMPONENT Runtime
-    )
-elseif(WIN32)
-    install(TARGETS nwss-cnc
-        RUNTIME DESTINATION . COMPONENT Runtime
-    )
-else() # Linux
-    install(TARGETS nwss-cnc
-        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
-        COMPONENT Runtime
-    )
-endif()
-
-# Create a package target for GitHub Actions to use
+# Custom target for GitHub Actions to use
 add_custom_target(package_for_github
     COMMAND ${CMAKE_COMMAND} --build . --target package
     COMMENT "Creating packages for GitHub release"

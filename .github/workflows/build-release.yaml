@@ -22,36 +22,27 @@ jobs:
           target: 'desktop'
           arch: 'win64_msvc2019_64'
           modules: 'qtserialport'
-          set-env: 'true'
-          aqtversion: '==3.2.*'
-
+          
       - name: Setup MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: 'x64'
       
-      - name: Create build directory
-        run: mkdir -p nwss-cnc/build
-
-      - name: Configure CMake
-        working-directory: ./nwss-cnc/build
+      - name: Configure and Build
         run: |
+          mkdir -p build
+          cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
-      - name: Build application
-        working-directory: ./nwss-cnc/build
-        run: cmake --build . --config Release
-
-      - name: Package application
-        working-directory: ./nwss-cnc/build
-        run: cmake --build . --target package_for_github
+          cmake --build . --config Release
+          cmake --build . --target package_for_github
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-package-x64
           path: |
-            ./nwss-cnc/build/*.zip
-            ./nwss-cnc/build/*.exe
+            ./build/*.zip
+            ./build/*.exe
   
   build-macos:
     name: Build macOS
@@ -78,29 +69,19 @@ jobs:
           target: 'desktop'
           arch: 'clang_64'
           modules: 'qtserialport'
-          set-env: 'true'
-          aqtversion: '==3.2.*'
-
-      - name: Create build directory
-        run: mkdir -p nwss-cnc/build
-
-      - name: Configure CMake
-        working-directory: ./nwss-cnc/build
+      
+      - name: Configure and Build
         run: |
+          mkdir -p build
+          cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release \
                  -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
-                 -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
-                 -DCMAKE_CXX_FLAGS="-O3"
-      - name: Build application
-        working-directory: ./nwss-cnc/build
-        run: cmake --build . --config Release
-
-      - name: Package application
-        working-directory: ./nwss-cnc/build
-        run: cmake --build . --target package_for_github
+                 -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
+          cmake --build . --config Release
+          cmake --build . --target package_for_github
       
       - name: Rename artifacts for clarity
-        working-directory: ./nwss-cnc/build
+        working-directory: ./build
         run: |
           for file in *.dmg; do
             if [ -f "$file" ]; then
@@ -112,7 +93,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-package-${{ matrix.artifact_suffix }}
-          path: ./nwss-cnc/build/*.dmg
+          path: ./build/*.dmg
   
   build-linux:
     name: Build Linux (Ubuntu)
@@ -137,48 +118,34 @@ jobs:
           target: 'desktop'
           arch: 'gcc_64'
           modules: 'qtserialport'
-          set-env: 'true'
-          aqtversion: '==3.2.*'
-
-      - name: Create build directory
-        run: mkdir -p nwss-cnc/build
-
-      - name: Configure CMake
-        working-directory: ./nwss-cnc/build
+      
+      - name: Configure and Build
         run: |
-          cmake .. -DCMAKE_BUILD_TYPE=Release \
-                 -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
-                 -DCMAKE_CXX_FLAGS="-O3"
-      - name: Build application
-        working-directory: ./nwss-cnc/build
-        run: cmake --build . --config Release
-
-      - name: Package application
-        working-directory: ./nwss-cnc/build
-        run: cmake --build . --target package_for_github
+          mkdir -p build
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$Qt6_DIR"
+          cmake --build . --config Release
+          cmake --build . --target package_for_github
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-package
           path: |
-            ./nwss-cnc/build/*.deb
-            ./nwss-cnc/build/*.rpm
-            ./nwss-cnc/build/*.tar.gz
+            ./build/*.deb
+            ./build/*.rpm
+            ./build/*.tar.gz
   
   create-release:
     needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # This is the critical permission needed to create releases
+      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-      
-      - name: Display structure of downloaded files
-        run: ls -R artifacts
       
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -206,7 +173,3 @@ jobs:
             - Ubuntu/Debian package (.deb)
             - Red Hat/Fedora package (.rpm)
             - Portable Linux package (.tar.gz)
-            
-            ## Changes in this release
-            
-            [Release notes here]
