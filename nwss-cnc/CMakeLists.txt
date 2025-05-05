@@ -28,7 +28,7 @@ endif()
 # Find Qt packages
 find_package(Qt6 COMPONENTS Core Gui Widgets OpenGLWidgets Svg SvgWidgets SerialPort REQUIRED)
 
-# Set include directories - FIX: Add individual include subdirectories
+# Set include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include/core
@@ -134,15 +134,33 @@ elseif(WIN32)
     
     install(TARGETS nwss-cnc RUNTIME DESTINATION ".")
     
-    # Run windeployqt after build
+    # Fix for windeployqt - Find the correct path
+    find_program(WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS "${Qt6Core_DIR}/../../../bin")
+    if(WINDEPLOYQT_EXECUTABLE)
+        # Run windeployqt after build
+        add_custom_command(TARGET nwss-cnc POST_BUILD
+            COMMAND "${WINDEPLOYQT_EXECUTABLE}"
+                    --no-translations
+                    --no-system-d3d-compiler
+                    --no-opengl-sw
+                    --no-angle
+                    --release
+                    "$<TARGET_FILE:nwss-cnc>"
+            COMMENT "Deploying Qt dependencies..."
+        )
+    else()
+        message(WARNING "windeployqt not found! Skipping Qt dependency deployment.")
+    endif()
+    
+    # Create a post-build step to copy files to an 'install' directory for packaging
     add_custom_command(TARGET nwss-cnc POST_BUILD
-        COMMAND "${Qt6_DIR}/bin/windeployqt.exe" 
-                --no-translations 
-                --release 
-                "$<TARGET_FILE:nwss-cnc>"
-        COMMENT "Deploying Qt dependencies..."
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/install"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:nwss-cnc>" "${CMAKE_BINARY_DIR}/install/"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_FILE_DIR:nwss-cnc>" "${CMAKE_BINARY_DIR}/install"
+        COMMENT "Creating installation directory..."
     )
     
+    # Package with CPack
     set(CPACK_GENERATOR "ZIP;NSIS")
     set(CPACK_PACKAGE_FILE_NAME "NWSS-CNC-${PROJECT_VERSION}-win64")
     set(CPACK_PACKAGE_INSTALL_DIRECTORY "NWSS-CNC")
@@ -181,7 +199,18 @@ else()
         DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/${APP_NAME}/fonts"
     )
     
+    # Linux packaging generators
     set(CPACK_GENERATOR "TGZ;DEB;RPM")
+    
+    # Fix for Debian packaging - required maintainer field
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${APP_COMPANY} <info@nwss.org>")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "graphics")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, libqt6core6, libqt6gui6, libqt6widgets6, libqt6svg6, libqt6serialport6")
+    
+    # RPM package settings
+    set(CPACK_RPM_PACKAGE_LICENSE "Proprietary")
+    set(CPACK_RPM_PACKAGE_GROUP "Applications/Graphics")
+    set(CPACK_RPM_PACKAGE_REQUIRES "qt6-qtbase, qt6-qtsvg, qt6-qtserialport")
 endif()
 
 # Link libraries for the main executable
@@ -205,11 +234,21 @@ target_include_directories(nwss-cnc PRIVATE
 include(CPack)
 set(CPACK_PACKAGE_NAME "${APP_NAME}")
 set(CPACK_PACKAGE_VENDOR "${APP_COMPANY}")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "NWSS CNC Software")
+set(CPACK_PACKAGE_CONTACT "${APP_COMPANY} <info@nwss.org>")  # General contact for all packages
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "NWSS CNC - SVG to G-Code Converter")
 set(CPACK_PACKAGE_VERSION "${APP_VERSION}")
 
-# Custom target for GitHub Actions to use
-add_custom_target(package_for_github
-    COMMAND ${CMAKE_COMMAND} --build . --target package
-    COMMENT "Creating packages for GitHub release"
-)
+# Special handling for package_for_github target on Windows
+if(WIN32)
+    add_custom_target(package_for_github
+        COMMAND ${CMAKE_COMMAND} --build . --target package
+        COMMENT "Creating packages for GitHub release"
+        DEPENDS nwss-cnc
+    )
+else()
+    # Standard version for macOS and Linux
+    add_custom_target(package_for_github
+        COMMAND ${CMAKE_COMMAND} --build . --target package
+        COMMENT "Creating packages for GitHub release"
+    )
+endif()
