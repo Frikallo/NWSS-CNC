@@ -143,7 +143,6 @@ elseif(WIN32)
                     --no-translations
                     --no-system-d3d-compiler
                     --no-opengl-sw
-                    --no-angle
                     --release
                     "$<TARGET_FILE:nwss-cnc>"
             COMMENT "Deploying Qt dependencies..."
