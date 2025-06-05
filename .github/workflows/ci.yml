@@ -29,7 +29,7 @@ jobs:
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
-        host: ${{ runner.os == 'macOS' && 'mac' || 'windows' }}
+        host: ${{ matrix.os == 'macos-latest' && 'mac' || 'windows' }}
         target: 'desktop'
         arch: ${{ matrix.qt_arch }}
         modules: 'qtserialport qtsvg qtopengl'
@@ -54,8 +54,14 @@ jobs:
       if: runner.os == 'macOS'
       run: chmod +x build-macos.sh
 
-    - name: Build application
-      shell: ${{ runner.os == 'Windows' && 'cmd' || 'bash' }}
+    - name: Build application (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: ${{ matrix.build_script }}
+
+    - name: Build application (Windows)
+      if: runner.os == 'Windows'
+      shell: cmd
       run: ${{ matrix.build_script }}
 
     - name: Verify build (macOS)
