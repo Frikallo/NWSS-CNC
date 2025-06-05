@@ -1,0 +1,163 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            qt_arch: clang_64
+            build_script: ./build-macos.sh
+          - os: windows-latest
+            qt_arch: win64_msvc2022_64  
+            build_script: build-windows.bat
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Qt6
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.6.0'
+        host: ${{ runner.os == 'macOS' && 'mac' || 'windows' }}
+        target: 'desktop'
+        arch: ${{ matrix.qt_arch }}
+        modules: 'qtserialport qtsvg qtopengl'
+        cache: true
+
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install cmake ninja
+
+    - name: Setup MSVC (Windows)
+      if: runner.os == 'Windows'
+      uses: microsoft/setup-msbuild@v1.3
+
+    - name: Setup CMake (Windows)
+      if: runner.os == 'Windows'
+      uses: jwlawson/actions-setup-cmake@v1.14
+      with:
+        cmake-version: '3.25.0'
+
+    - name: Make build script executable (macOS)
+      if: runner.os == 'macOS'
+      run: chmod +x build-macos.sh
+
+    - name: Build application
+      shell: ${{ runner.os == 'Windows' && 'cmd' || 'bash' }}
+      run: ${{ matrix.build_script }}
+
+    - name: Verify build (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        if [ -d "build-macos/NWSS-CNC.app" ]; then
+          echo "✅ macOS app bundle created successfully"
+          ls -la "build-macos/NWSS-CNC.app/Contents/MacOS/"
+        else
+          echo "❌ macOS app bundle not found"
+          exit 1
+        fi
+
+    - name: Verify build (Windows)
+      if: runner.os == 'Windows'
+      shell: cmd
+      run: |
+        if exist "NWSS-CNC-Windows\nwss-cnc.exe" (
+          echo ✅ Windows executable created successfully
+          dir "NWSS-CNC-Windows\"
+        ) else (
+          echo ❌ Windows executable not found
+          exit 1
+        )
+
+    - name: Upload build artifacts (for debugging)
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: debug-build-${{ runner.os }}
+        path: |
+          build-*/
+          *.log
+          CMakeCache.txt
+        retention-days: 7
+
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check file structure
+      run: |
+        echo "🔍 Checking project structure..."
+        
+        # Check for required directories
+        required_dirs=("nwss-cnc/src" "nwss-cnc/include" "nwss-cnc/src/core" "nwss-cnc/src/gui")
+        for dir in "${required_dirs[@]}"; do
+          if [ -d "$dir" ]; then
+            echo "✅ $dir exists"
+          else
+            echo "❌ $dir missing"
+            exit 1
+          fi
+        done
+        
+        # Check for CMakeLists.txt
+        if [ -f "nwss-cnc/CMakeLists.txt" ]; then
+          echo "✅ CMakeLists.txt found"
+        else
+          echo "❌ CMakeLists.txt missing"
+          exit 1
+        fi
+        
+        # Check for build scripts
+        if [ -f "build-macos.sh" ] && [ -f "build-windows.bat" ]; then
+          echo "✅ Build scripts found"
+        else
+          echo "❌ Build scripts missing"
+          exit 1
+        fi
+
+    - name: Validate CMakeLists.txt
+      run: |
+        echo "🔍 Validating CMakeLists.txt..."
+        cd nwss-cnc
+        
+        # Check for required Qt components
+        required_components=("Core" "Gui" "Widgets" "OpenGLWidgets" "Svg" "SvgWidgets" "SerialPort")
+        for component in "${required_components[@]}"; do
+          if grep -q "Qt6::$component" CMakeLists.txt; then
+            echo "✅ Qt6::$component found"
+          else
+            echo "❌ Qt6::$component missing from CMakeLists.txt"
+            exit 1
+          fi
+        done
+
+    - name: Check source files
+      run: |
+        echo "🔍 Checking source files..."
+        
+        # Count source files
+        cpp_files=$(find nwss-cnc/src -name "*.cpp" | wc -l)
+        header_files=$(find nwss-cnc/include -name "*.h" | wc -l)
+        
+        echo "📊 Found $cpp_files .cpp files and $header_files .h files"
+        
+        if [ "$cpp_files" -eq 0 ] || [ "$header_files" -eq 0 ]; then
+          echo "❌ Insufficient source files found"
+          exit 1
+        fi
+        
+        echo "✅ Source file structure looks good" 

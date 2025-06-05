@@ -1,0 +1,250 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+  workflow_dispatch:  # Allow manual triggering
+    inputs:
+      create_release:
+        description: 'Create a new release'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Qt6
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.6.0'
+        host: 'mac'
+        target: 'desktop'
+        arch: 'clang_64'
+        modules: 'qtserialport qtsvg qtopengl'
+        cache: true
+
+    - name: Install dependencies
+      run: |
+        brew install cmake ninja
+
+    - name: Make build script executable
+      run: chmod +x build-macos.sh
+
+    - name: Build application
+      run: ./build-macos.sh
+
+    - name: Verify build output
+      run: |
+        echo "Checking for app bundle..."
+        ls -la build-macos/
+        if [ -d "build-macos/NWSS-CNC.app" ]; then
+          echo "✅ App bundle found"
+          ls -la "build-macos/NWSS-CNC.app/Contents/"
+        fi
+        
+        echo "Checking for packages..."
+        ls -la *.dmg *.zip || echo "No packages found in root"
+
+    - name: Upload macOS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: NWSS-CNC-macOS
+        path: |
+          *.dmg
+          *.zip
+          build-macos/NWSS-CNC.app
+        if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Qt6
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.6.0'
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_msvc2022_64'
+        modules: 'qtserialport qtsvg qtopengl'
+        cache: true
+
+    - name: Setup MSVC
+      uses: microsoft/setup-msbuild@v1.3
+
+    - name: Setup CMake
+      uses: jwlawson/actions-setup-cmake@v1.14
+      with:
+        cmake-version: '3.25.0'
+
+    - name: Build application
+      shell: cmd
+      run: build-windows.bat
+
+    - name: Verify build output
+      shell: cmd
+      run: |
+        echo Checking for executable...
+        dir build-windows\Release\ || echo "Release directory not found"
+        dir NWSS-CNC-Windows\ || echo "Distribution directory not found"
+        dir *.zip || echo "No ZIP packages found"
+
+    - name: Upload Windows artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: NWSS-CNC-Windows
+        path: |
+          *.zip
+          NWSS-CNC-Windows/
+        if-no-files-found: error
+
+  create-release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.create_release == 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download macOS artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: NWSS-CNC-macOS
+        path: ./artifacts/macos/
+
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: NWSS-CNC-Windows
+        path: ./artifacts/windows/
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        
+        # Find and rename macOS assets
+        find ./artifacts/macos/ -name "*.dmg" -exec cp {} release-assets/ \;
+        find ./artifacts/macos/ -name "*macOS*.zip" -exec cp {} release-assets/ \;
+        
+        # Find and rename Windows assets
+        find ./artifacts/windows/ -name "*Windows*.zip" -exec cp {} release-assets/ \;
+        
+        # List what we're releasing
+        echo "Release assets:"
+        ls -la release-assets/
+
+    - name: Get version from tag
+      id: version
+      run: |
+        if [[ $GITHUB_REF == refs/tags/* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+        else
+          VERSION="development-$(date +%Y%m%d-%H%M%S)"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        cat << 'EOF' > release_notes.md
+        ## NWSS-CNC Release ${{ steps.version.outputs.version }}
+        
+        ### 🚀 What's New
+        - Production-ready builds for macOS and Windows
+        - All Qt dependencies included - no installation required
+        - Optimized performance and stability improvements
+        
+        ### 📦 Downloads
+        
+        **macOS:**
+        - `*.dmg` - Drag and drop installer (recommended)
+        - `*macOS*.zip` - Portable version
+        
+        **Windows:**
+        - `*Windows*.zip` - Extract and run (all dependencies included)
+        
+        ### 💻 System Requirements
+        
+        **macOS:**
+        - macOS 10.15 (Catalina) or later
+        - Intel or Apple Silicon Mac
+        
+        **Windows:**
+        - Windows 10 or later (64-bit)
+        - No additional software required
+        
+        ### 🛠️ Installation
+        
+        **macOS:**
+        1. Download the `.dmg` file
+        2. Open it and drag NWSS-CNC to Applications
+        3. Launch from Applications folder
+        
+        **Windows:**
+        1. Download the Windows ZIP file
+        2. Extract to any folder
+        3. Run `nwss-cnc.exe`
+        
+        ### 🐛 Known Issues
+        - First launch may take a few seconds while Qt initializes
+        - On macOS, you may need to allow the app in Security & Privacy settings
+        
+        Built with Qt 6.6.0 | CMake | GitHub Actions
+        EOF
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: NWSS-CNC ${{ steps.version.outputs.version }}
+        body_path: release_notes.md
+        files: release-assets/*
+        draft: false
+        prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Optional: Build verification job
+  verify-builds:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Verify artifacts
+      run: |
+        echo "=== Build Verification Report ==="
+        echo ""
+        
+        echo "📁 macOS Build:"
+        if [ -d "NWSS-CNC-macOS" ]; then
+          find NWSS-CNC-macOS -type f -name "*.dmg" -o -name "*.zip" -o -name "NWSS-CNC" | head -10
+          echo "✅ macOS artifacts present"
+        else
+          echo "❌ macOS artifacts missing"
+        fi
+        
+        echo ""
+        echo "📁 Windows Build:"
+        if [ -d "NWSS-CNC-Windows" ]; then
+          find NWSS-CNC-Windows -type f -name "*.zip" -o -name "*.exe" | head -10
+          echo "✅ Windows artifacts present"
+        else
+          echo "❌ Windows artifacts missing"
+        fi
+        
+        echo ""
+        echo "📊 Total artifact size:"
+        du -sh NWSS-CNC-* 2>/dev/null || echo "No artifacts to measure" 
