@@ -14,9 +14,11 @@
 #include <QStackedWidget>
 #include "gcodeeditor.h"
 #include "gcodeviewer3d.h"
-#include "svgviewer.h"
 #include "gcodeoptionspanel.h"
 #include "svgtogcode.h"
+#include "svgdesigner.h"
+#include "toolmanager.h"
+#include "core/tool.h"
 
 class MainWindow : public QMainWindow
 {
@@ -38,6 +40,9 @@ private slots:
     void importSvgFile();
     void convertSvgToGCode(const QString &svgFile);
     void onTabChanged(int index);
+    void showToolManager();
+    void onToolSelected(int toolId);
+    void onToolRegistryChanged();
 
 private:
     void createActions();
@@ -62,11 +67,16 @@ private:
     GCodeOptionsPanel *gcodeOptionsPanel;
     GCodeEditor *gCodeEditor;
     GCodeViewer3D *gCodeViewer;
-    SVGViewer *svgViewer;
+    SVGDesigner *svgDesigner;
     SvgToGCode *svgToGCode;
+    
+    // Tool management
+    nwss::cnc::ToolRegistry *toolRegistry;
+    nwss::cnc::ToolSelector *toolSelector;
 
     QDockWidget *machineDock;
     QDockWidget *gcodeOptionsDock;
+    QDockWidget *toolDock;
 
     QMenu *fileMenu;
     QMenu *editMenu;
@@ -91,6 +101,8 @@ private:
     QAction *aboutQtAct;
     QAction *showMachinePanelAct;
     QAction *showGCodeOptionsPanelAct;
+    QAction *showToolPanelAct;
+    QAction *manageToolsAct;
     QLabel *timeEstimateLabel;
 };
 

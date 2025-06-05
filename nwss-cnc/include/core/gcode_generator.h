@@ -3,6 +3,8 @@
 
 #include "core/geometry.h"
 #include "core/config.h"
+#include "core/tool.h"
+#include "core/tool_offset.h"
 #include <string>
 #include <vector>
 
@@ -14,6 +16,7 @@ namespace cnc {
  */
 struct GCodeOptions {
     // Basic options
+    bool includeComments = false;
     std::string comments;         // Additional comments to include in the header
     bool useInches;               // Override units to inches (false = mm)
     bool includeHeader;           // Whether to include a descriptive header
@@ -27,7 +30,11 @@ struct GCodeOptions {
     double linearizeTolerance; // Maximum deviation allowed for linearization
     
     // Tool options
-    double toolDiameter;          // Tool diameter for offsetting (0 = no offset)
+    int selectedToolId;           // ID of the selected tool from registry
+    ToolOffsetDirection offsetDirection; // Tool offset direction
+    bool enableToolOffsets;       // Whether to apply tool offsets
+    bool validateFeatureSizes;    // Whether to validate feature sizes against tool
+    std::string materialType;     // Material type for optimized cutting parameters
     
     // Constructor with default values
     GCodeOptions() : 
@@ -40,7 +47,11 @@ struct GCodeOptions {
         separateRetract(true),
         linearizePaths(true),     // Enable linearization by default
         linearizeTolerance(0.01), // Default tolerance (adjust as needed)
-        toolDiameter(0.0)
+        selectedToolId(0),
+        offsetDirection(ToolOffsetDirection::AUTO),
+        enableToolOffsets(true),
+        validateFeatureSizes(true),
+        materialType("Unknown")
     {}
 };
 
@@ -74,6 +85,12 @@ public:
     void setOptions(const GCodeOptions& options);
     
     /**
+     * Set the tool registry
+     * @param registry The tool registry to use
+     */
+    void setToolRegistry(const ToolRegistry& registry);
+    
+    /**
      * Generate G-code from a set of paths
      * @param paths The discretized paths to convert to G-code
      * @param outputFile Path to the output G-code file
@@ -94,10 +111,19 @@ public:
      * @return A TimeEstimate structure with the calculated times
      */
      TimeEstimate calculateTimeEstimate(const std::vector<Path>& paths) const;
+     
+     /**
+      * Validate paths against the selected tool
+      * @param paths The paths to validate
+      * @param warnings Output vector for warning messages
+      * @return True if all paths can be machined with the selected tool
+      */
+     bool validatePaths(const std::vector<Path>& paths, std::vector<std::string>& warnings) const;
     
 private:
     CNConfig m_config;            // CNC machine configuration
     GCodeOptions m_options;       // G-code generation options
+    ToolRegistry m_toolRegistry;  // Tool registry
     
     /**
      * Generate the G-code header
@@ -135,6 +161,13 @@ private:
       * @return True if the points are collinear, false otherwise
       */
      bool isCollinear(const Point2D& p1, const Point2D& p2, const Point2D& p3) const;
+     
+     /**
+      * Apply tool offset to paths if enabled
+      * @param paths The input paths
+      * @return Vector of offset paths
+      */
+     std::vector<Path> applyToolOffsets(const std::vector<Path>& paths) const;
 };
 
 } // namespace cnc

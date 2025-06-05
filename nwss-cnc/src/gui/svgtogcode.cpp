@@ -138,7 +138,9 @@ QString SvgToGCode::convertSvgToGCode(
     gCodeOptions.separateRetract = separateRetract;
     gCodeOptions.linearizePaths = linearizePaths;
     gCodeOptions.linearizeTolerance = linearizeTolerance;
-    gCodeOptions.toolDiameter = toolDiameter;
+    // Note: Tool selection should be handled by the GUI, for now disable tool offsets
+    gCodeOptions.enableToolOffsets = false;
+    gCodeOptions.validateFeatureSizes = false;
     gCodeGen.setConfig(CNconfig);
     gCodeGen.setOptions(gCodeOptions);
     

@@ -5,3 +5,4 @@
 *.svg
 *.nc
 *.gcode
+.DS_Store

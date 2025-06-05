@@ -47,6 +47,8 @@ set(CORE_SOURCES
     src/core/config.cpp
     src/core/transform.cpp
     src/core/gcode_generator.cpp
+    src/core/tool.cpp
+    src/core/tool_offset.cpp
 )
 
 # Create the core static library
@@ -60,9 +62,10 @@ set(GUI_SOURCES
     src/gui/mainwindow.cpp
     src/gui/gcodeeditor.cpp
     src/gui/gcodeviewer3d.cpp
-    src/gui/svgviewer.cpp
+    src/gui/svgdesigner.cpp
     src/gui/gcodeoptionspanel.cpp
     src/gui/svgtogcode.cpp
+    src/gui/toolmanager.cpp
     src/main.cpp
 )
 
@@ -71,9 +74,10 @@ set(GUI_HEADERS
     include/gui/mainwindow.h
     include/gui/gcodeeditor.h
     include/gui/gcodeviewer3d.h
-    include/gui/svgviewer.h
+    include/gui/svgdesigner.h
     include/gui/gcodeoptionspanel.h
     include/gui/svgtogcode.h
+    include/gui/toolmanager.h
 )
 
 # Define resources

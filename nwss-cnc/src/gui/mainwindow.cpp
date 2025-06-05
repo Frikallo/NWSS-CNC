@@ -19,6 +19,12 @@
 #include <QDialog>
 #include <QCheckBox>
 #include <QFrame>
+#include <QSet>
+#include "svg_parser.h"
+#include "discretizer.h"
+#include "config.h"
+#include "transform.h"
+#include "gcode_generator.h"
 
 class WelcomeDialog : public QDialog
 {
@@ -83,15 +89,20 @@ public:
     }
 };
 
+// In MainWindow constructor:
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), isUntitled(true)
 {
     // Create all the components
     gCodeEditor = new GCodeEditor(this);
     gCodeViewer = new GCodeViewer3D(this);
-    svgViewer = new SVGViewer(this);
+    svgDesigner = new SVGDesigner(this);  // Changed from svgViewer
     gcodeOptionsPanel = new GCodeOptionsPanel(this);
     svgToGCode = new SvgToGCode(this);
+    
+    // Create tool management components
+    toolRegistry = new nwss::cnc::ToolRegistry();
+    toolSelector = new nwss::cnc::ToolSelector(*toolRegistry, this);
 
     // Set up the tab widget for the main content area
     setupTabWidget();
@@ -112,12 +123,43 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onTabChanged);
     connect(gcodeOptionsPanel, &GCodeOptionsPanel::generateGCode,
             this, &MainWindow::convertSvgToGCode);
-    connect(svgViewer, &SVGViewer::convertToGCode,
+    
+    // Update these connections for svgDesigner
+    connect(svgDesigner, &SVGDesigner::convertToGCode,
             this, &MainWindow::convertSvgToGCode);
-    connect(svgViewer, &SVGViewer::svgLoaded, 
+    connect(svgDesigner, &SVGDesigner::svgLoaded, 
         [this](const QString& filePath) {
             gcodeOptionsPanel->setCurrentSvgFile(filePath);
         });
+            
+    // Connect material size updates to designer
+    connect(gcodeOptionsPanel, &GCodeOptionsPanel::settingsLoaded,
+        [this]() {
+            // Update material and bed size in the designer
+            svgDesigner->setMaterialSize(
+                gcodeOptionsPanel->getMaterialWidth(),
+                gcodeOptionsPanel->getMaterialHeight());
+            
+            svgDesigner->setBedSize(
+                gcodeOptionsPanel->getBedWidth(),
+                gcodeOptionsPanel->getBedHeight());
+        });
+    
+    // Update designer when material settings change
+    connect(gcodeOptionsPanel, &GCodeOptionsPanel::optionsChanged,
+        [this]() {
+            svgDesigner->setMaterialSize(
+                gcodeOptionsPanel->getMaterialWidth(),
+                gcodeOptionsPanel->getMaterialHeight());
+            
+            svgDesigner->setBedSize(
+                gcodeOptionsPanel->getBedWidth(),
+                gcodeOptionsPanel->getBedHeight());
+        });
+    
+    // Connect tool management signals
+    connect(toolSelector, &nwss::cnc::ToolSelector::toolSelected,
+            this, &MainWindow::onToolSelected);
 
     // Initial state
     setCurrentFile("");
@@ -142,7 +184,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    // Any necessary cleanup
+    delete toolRegistry;
 }
 
 void MainWindow::setupTabWidget()
@@ -156,7 +198,7 @@ void MainWindow::setupTabWidget()
     // Add tabs
     tabWidget->addTab(gCodeEditor, tr("G-Code Editor"));
     tabWidget->addTab(gCodeViewer, tr("3D Preview"));
-    tabWidget->addTab(svgViewer, tr("Designer"));
+    tabWidget->addTab(svgDesigner, tr("Designer"));
     
     // Set as central widget
     setCentralWidget(tabWidget);
@@ -213,6 +255,15 @@ void MainWindow::createActions()
     showGCodeOptionsPanelAct = new QAction(tr("Show G-Code Options Panel"), this);
     showGCodeOptionsPanelAct->setCheckable(true);
     showGCodeOptionsPanelAct->setChecked(true);
+    
+    showToolPanelAct = new QAction(tr("Show Tool Panel"), this);
+    showToolPanelAct->setCheckable(true);
+    showToolPanelAct->setChecked(true);
+    
+    // Tools menu actions
+    manageToolsAct = new QAction(tr("&Manage Tools..."), this);
+    manageToolsAct->setStatusTip(tr("Open the tool management dialog"));
+    connect(manageToolsAct, &QAction::triggered, this, &MainWindow::showToolManager);
 
     // Help menu actions
     aboutAct = new QAction(tr("&About"), this);
@@ -243,9 +294,10 @@ void MainWindow::createMenus()
 
     viewMenu = menuBar()->addMenu(tr("&View"));
     viewMenu->addAction(showGCodeOptionsPanelAct);
+    viewMenu->addAction(showToolPanelAct);
     
     toolsMenu = menuBar()->addMenu(tr("&Tools"));
-    // Add tools menu actions later
+    toolsMenu->addAction(manageToolsAct);
 
     menuBar()->addSeparator();
 
@@ -297,9 +349,18 @@ void MainWindow::createDockPanels()
     gcodeOptionsDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
     addDockWidget(Qt::LeftDockWidgetArea, gcodeOptionsDock);
     
-    // Connect the show/hide action
+    // Tool panel dock
+    toolDock = new QDockWidget(tr("Tools"), this);
+    toolDock->setWidget(toolSelector);
+    toolDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    addDockWidget(Qt::LeftDockWidgetArea, toolDock);
+    
+    // Connect the show/hide actions
     connect(showGCodeOptionsPanelAct, &QAction::toggled, gcodeOptionsDock, &QDockWidget::setVisible);
     connect(gcodeOptionsDock, &QDockWidget::visibilityChanged, showGCodeOptionsPanelAct, &QAction::setChecked);
+    
+    connect(showToolPanelAct, &QAction::toggled, toolDock, &QDockWidget::setVisible);
+    connect(toolDock, &QDockWidget::visibilityChanged, showToolPanelAct, &QAction::setChecked);
 }
 
 void MainWindow::createStatusBar()
@@ -324,8 +385,10 @@ void MainWindow::readSettings()
     
     // Restore dock widget states
     bool gcodeOptionsPanelVisible = settings.value("gcodeOptionsPanelVisible", true).toBool();
+    bool toolPanelVisible = settings.value("toolPanelVisible", true).toBool();
     
     gcodeOptionsDock->setVisible(gcodeOptionsPanelVisible);
+    toolDock->setVisible(toolPanelVisible);
     
     // Restore tab index
     int tabIndex = settings.value("activeTabIndex", 0).toInt();
@@ -340,6 +403,7 @@ void MainWindow::writeSettings()
     
     // Save dock widget states
     settings.setValue("gcodeOptionsPanelVisible", gcodeOptionsDock->isVisible());
+    settings.setValue("toolPanelVisible", toolDock->isVisible());
     
     // Save active tab
     settings.setValue("activeTabIndex", tabWidget->currentIndex());
@@ -392,7 +456,7 @@ void MainWindow::importSvgFile()
     QString fileName = QFileDialog::getOpenFileName(this, tr("Import SVG File"), "",
                                                    tr("SVG Files (*.svg);;All Files (*)"));
     if (!fileName.isEmpty()) {
-        svgViewer->loadSvgFile(fileName);
+        svgDesigner->loadSvgFile(fileName);  // Changed from svgViewer
         tabWidget->setCurrentIndex(2);
     }
 }
@@ -518,81 +582,183 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
         return;
     }
     
-    // Get all parameters from the GCode options panel
-    double toolDiameter = gcodeOptionsPanel->getToolDiameter();
-    double feedRate = gcodeOptionsPanel->getFeedRate();
-    double plungeRate = gcodeOptionsPanel->getPlungeRate();
-    double passDepth = gcodeOptionsPanel->getCutDepth();
-    int passCount = gcodeOptionsPanel->getPassCount();
-    double safetyHeight = gcodeOptionsPanel->getSafetyHeightEnabled() ? 
-                           gcodeOptionsPanel->getSafetyHeight() : 5.0;
-    bool optimizePaths = gcodeOptionsPanel->getOptimizePaths();
-    bool linearizePaths = gcodeOptionsPanel->getLinearizePaths();
+    // Get the selected tool
+    int selectedToolId = toolSelector->getSelectedToolId();
+    const nwss::cnc::Tool* selectedTool = toolRegistry->getTool(selectedToolId);
     
-    // Convert SVG to GCode using all settings
-    QString gcode = svgToGCode->convertSvgToGCode(
-        svgFile,
-        gcodeOptionsPanel->getBezierSamples(),
-        gcodeOptionsPanel->getSimplifyTolerance(),
-        gcodeOptionsPanel->getAdaptiveSampling(),
-        gcodeOptionsPanel->getMaxPointDistance(),
-        gcodeOptionsPanel->getBedWidth(),
-        gcodeOptionsPanel->getBedHeight(),
-        "mm",
-        gcodeOptionsPanel->getMaterialWidth(),
-        gcodeOptionsPanel->getMaterialHeight(),
-        gcodeOptionsPanel->getMaterialThickness(),
-        gcodeOptionsPanel->getFeedRate(),
-        gcodeOptionsPanel->getPlungeRate(),
-        gcodeOptionsPanel->getSpindleSpeed(),
-        gcodeOptionsPanel->getCutDepth(),
-        gcodeOptionsPanel->getPassCount(),
-        gcodeOptionsPanel->getSafetyHeight(),
-        gcodeOptionsPanel->getPreserveAspectRatio(),
-        gcodeOptionsPanel->getCenterX(),
-        gcodeOptionsPanel->getFlipY(),
-        gcodeOptionsPanel->getOptimizePaths(),
-        false,
-        false,
-        gcodeOptionsPanel->getLinearizePaths(),
-        0.01,
-        gcodeOptionsPanel->getToolDiameter()
-    );
-    
-    if (gcode.isEmpty()) {
-        QMessageBox::warning(this, tr("Conversion Error"),
-                            tr("Failed to convert SVG to GCode: %1")
-                            .arg(svgToGCode->lastError()));
+    if (!selectedTool && selectedToolId != 0) {
+        QMessageBox::warning(this, tr("Tool Error"),
+                            tr("Selected tool not found. Please select a valid tool."));
         return;
     }
     
-    // Get the time estimate
-    auto timeEstimate = svgToGCode->getTimeEstimate();
-    
-    // Format time as HH:MM:SS
-    int totalSeconds = static_cast<int>(timeEstimate.totalTime);
-    int hours = totalSeconds / 3600;
-    int minutes = (totalSeconds % 3600) / 60;
-    int seconds = totalSeconds % 60;
-    
-    QString timeString = QString("%1:%2:%3")
-                          .arg(hours, 2, 10, QChar('0'))
-                          .arg(minutes, 2, 10, QChar('0'))
-                          .arg(seconds, 2, 10, QChar('0'));
-    
-    // Update time estimate label
-    timeEstimateLabel->setText(tr("Est. time: %1").arg(timeString));
-    
-    // Update the GCode editor with the generated code
-    gCodeEditor->setPlainText(gcode);
-    
-    // Switch to the 3d preview tab
-    tabWidget->setCurrentIndex(1);
-    
-    // Mark as untitled so user can save it
-    setCurrentFile("");
-    
-    statusBar()->showMessage(tr("SVG converted to GCode"), 3000);
+    try {
+        // Step 1: Parse SVG
+        nwss::cnc::SVGParser parser;
+        if (!parser.loadFromFile(svgFile.toStdString(), "mm", 96.0f)) {
+            QMessageBox::warning(this, tr("SVG Error"),
+                                tr("Failed to load SVG file."));
+            return;
+        }
+        
+        // Step 2: Setup discretizer
+        nwss::cnc::Discretizer discretizer;
+        nwss::cnc::DiscretizerConfig discretizerConfig;
+        discretizerConfig.bezierSamples = gcodeOptionsPanel->getBezierSamples();
+        discretizerConfig.simplifyTolerance = gcodeOptionsPanel->getSimplifyTolerance();
+        discretizerConfig.adaptiveSampling = gcodeOptionsPanel->getAdaptiveSampling();
+        discretizerConfig.maxPointDistance = gcodeOptionsPanel->getMaxPointDistance();
+        discretizer.setConfig(discretizerConfig);
+        
+        // Step 3: Discretize paths
+        std::vector<nwss::cnc::Path> paths = discretizer.discretizeImage(parser.getRawImage());
+        
+                 // Step 4: Setup CNC configuration
+         nwss::cnc::CNConfig config;
+        config.setBedWidth(gcodeOptionsPanel->getBedWidth());
+        config.setBedHeight(gcodeOptionsPanel->getBedHeight());
+        config.setUnitsFromString("mm");
+        config.setMaterialWidth(gcodeOptionsPanel->getMaterialWidth());
+        config.setMaterialHeight(gcodeOptionsPanel->getMaterialHeight());
+        config.setMaterialThickness(gcodeOptionsPanel->getMaterialThickness());
+        config.setFeedRate(gcodeOptionsPanel->getFeedRate());
+        config.setPlungeRate(gcodeOptionsPanel->getPlungeRate());
+        config.setSpindleSpeed(gcodeOptionsPanel->getSpindleSpeed());
+        config.setCutDepth(gcodeOptionsPanel->getCutDepth());
+        config.setPassCount(gcodeOptionsPanel->getPassCount());
+        config.setSafeHeight(gcodeOptionsPanel->getSafetyHeight());
+        
+        // Step 5: Transform paths to fit material
+        nwss::cnc::TransformInfo transformInfo;
+        if (!nwss::cnc::Transform::fitToMaterial(paths, config, 
+                                                gcodeOptionsPanel->getPreserveAspectRatio(),
+                                                gcodeOptionsPanel->getCenterX(),
+                                                gcodeOptionsPanel->getCenterX(),  // Use same for Y
+                                                gcodeOptionsPanel->getFlipY(),
+                                                &transformInfo)) {
+            QMessageBox::warning(this, tr("Transform Error"),
+                                tr("Failed to fit paths to material."));
+            return;
+        }
+        
+        // Step 6: Setup G-code generator with tool integration
+        nwss::cnc::GCodeGenerator generator;
+        generator.setConfig(config);
+        generator.setToolRegistry(*toolRegistry);
+        
+        nwss::cnc::GCodeOptions gCodeOptions;
+        gCodeOptions.selectedToolId = selectedToolId;
+        gCodeOptions.enableToolOffsets = (selectedTool != nullptr);
+        gCodeOptions.validateFeatureSizes = (selectedTool != nullptr);
+        gCodeOptions.offsetDirection = nwss::cnc::ToolOffsetDirection::AUTO;
+        gCodeOptions.materialType = "Unknown";  // Could be made configurable
+        gCodeOptions.optimizePaths = gcodeOptionsPanel->getOptimizePaths();
+        gCodeOptions.linearizePaths = gcodeOptionsPanel->getLinearizePaths();
+        gCodeOptions.linearizeTolerance = 0.01;
+        gCodeOptions.includeComments = true;
+        gCodeOptions.includeHeader = true;
+        gCodeOptions.returnToOrigin = true;
+        
+        generator.setOptions(gCodeOptions);
+        
+        // Step 7: Validate tool if selected (show warnings but don't block)
+        if (selectedTool) {
+            std::vector<std::string> warnings;
+            if (!generator.validatePaths(paths, warnings)) {
+                // Summarize warnings instead of listing every single one
+                QString warningMsg = tr("Tool Validation Summary:\n\n");
+                warningMsg += tr("• Tool diameter: %1mm\n").arg(selectedTool->diameter);
+                warningMsg += tr("• Number of paths with issues: %1 out of %2\n").arg(warnings.size()).arg(paths.size());
+                
+                // Show only the first few unique warning types
+                QSet<QString> uniqueWarnings;
+                for (const auto& warning : warnings) {
+                    QString warningStr = QString::fromStdString(warning);
+                    // Extract the warning type (remove path-specific details)
+                    if (warningStr.contains("Feature too small")) {
+                        uniqueWarnings.insert("Features are smaller than tool diameter");
+                    } else if (warningStr.contains("radius")) {
+                        uniqueWarnings.insert("Radius constraints violated");
+                    } else {
+                        uniqueWarnings.insert(warningStr);
+                    }
+                    
+                    // Limit to avoid huge dialogs
+                    if (uniqueWarnings.size() >= 3) break;
+                }
+                
+                warningMsg += tr("\nIssues found:\n");
+                for (const QString& uniqueWarning : uniqueWarnings) {
+                    warningMsg += QString("• %1\n").arg(uniqueWarning);
+                }
+                
+                warningMsg += tr("\nRecommendation: Consider using a smaller tool (like 1/16\" or 1/32\" for fine details).");
+                warningMsg += tr("\n\nG-code will still be generated, but may not produce optimal results.");
+                
+                // Create a properly sized message box
+                QMessageBox msgBox(this);
+                msgBox.setWindowTitle(tr("Tool Validation Notice"));
+                msgBox.setText(warningMsg);
+                msgBox.setIcon(QMessageBox::Warning);
+                msgBox.setStandardButtons(QMessageBox::Ok);
+                msgBox.setDefaultButton(QMessageBox::Ok);
+                
+                // Ensure dialog is reasonably sized and scrollable if needed
+                msgBox.setDetailedText(tr("Click 'Show Details' to see all %1 specific warnings if needed.").arg(warnings.size()));
+                
+                msgBox.exec();
+                
+                // Also add a warning to the status bar
+                statusBar()->showMessage(tr("Warning: Tool may be too large for %1 features").arg(warnings.size()), 5000);
+            }
+        }
+        
+        // Step 8: Generate G-code
+        std::string gcode = generator.generateGCodeString(paths);
+        
+        if (gcode.empty()) {
+            QMessageBox::warning(this, tr("G-code Error"),
+                                tr("Failed to generate G-code."));
+            return;
+        }
+        
+        // Step 9: Calculate time estimate
+        auto timeEstimate = generator.calculateTimeEstimate(paths);
+        
+        // Format time as HH:MM:SS
+        int totalSeconds = static_cast<int>(timeEstimate.totalTime);
+        int hours = totalSeconds / 3600;
+        int minutes = (totalSeconds % 3600) / 60;
+        int seconds = totalSeconds % 60;
+        
+        QString timeString = QString("%1:%2:%3")
+                              .arg(hours, 2, 10, QChar('0'))
+                              .arg(minutes, 2, 10, QChar('0'))
+                              .arg(seconds, 2, 10, QChar('0'));
+        
+        // Update time estimate label
+        timeEstimateLabel->setText(tr("Est. time: %1").arg(timeString));
+        
+        // Update the GCode editor with the generated code
+        gCodeEditor->setPlainText(QString::fromStdString(gcode));
+        
+        // Switch to the 3d preview tab
+        tabWidget->setCurrentIndex(1);
+        
+        // Mark as untitled so user can save it
+        setCurrentFile("");
+        
+        QString successMsg = tr("SVG converted to GCode");
+        if (selectedTool) {
+            successMsg += tr(" using %1").arg(QString::fromStdString(selectedTool->name));
+        }
+        statusBar()->showMessage(successMsg, 3000);
+        
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, tr("Conversion Error"),
+                            tr("An error occurred during conversion: %1")
+                            .arg(QString::fromStdString(e.what())));
+    }
 }
 
 void MainWindow::onTabChanged(int index)
@@ -634,4 +800,43 @@ void MainWindow::about()
                 "<p>Version 1.0</p>"
                 "<p>A modern CNC control application with G-Code editing, "
                 "3D previewing, and SVG import capabilities.</p>"));
+}
+
+void MainWindow::showToolManager()
+{
+    nwss::cnc::ToolManager toolManager(*toolRegistry, this);
+    
+    // Connect the tool registry changed signal to refresh our tool selector
+    connect(&toolManager, &nwss::cnc::ToolManager::toolRegistryChanged,
+            toolSelector, &nwss::cnc::ToolSelector::refreshTools);
+    
+    // If a tool is selected in the manager dialog, update our selector
+    connect(&toolManager, &nwss::cnc::ToolManager::toolSelected,
+            this, [this](int toolId) {
+                toolSelector->setSelectedTool(toolId);
+            });
+    
+    toolManager.exec();
+}
+
+void MainWindow::onToolSelected(int toolId)
+{
+    // Get the selected tool information
+    const nwss::cnc::Tool* tool = toolRegistry->getTool(toolId);
+    if (tool) {
+        statusBar()->showMessage(tr("Selected tool: %1 (diameter: %2mm)")
+                                .arg(QString::fromStdString(tool->name))
+                                .arg(tool->diameter), 3000);
+        
+        // TODO: Update G-code generation options with selected tool
+        // This could be integrated with the GCodeOptionsPanel
+    } else if (toolId == 0) {
+        statusBar()->showMessage(tr("No tool selected"), 2000);
+    }
+}
+
+void MainWindow::onToolRegistryChanged()
+{
+    // The tool registry has been modified, refresh the tool selector
+    toolSelector->refreshTools();
 }
