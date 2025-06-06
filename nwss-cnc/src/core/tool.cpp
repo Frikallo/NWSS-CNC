@@ -1,9 +1,9 @@
+#define _USE_MATH_DEFINES
 #include "core/tool.h"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
 #include <iostream>
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 namespace nwss {
