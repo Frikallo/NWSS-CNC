@@ -27,7 +27,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Find Qt packages
-find_package(Qt6 COMPONENTS Core Gui Widgets OpenGLWidgets Svg SvgWidgets REQUIRED)
+find_package(Qt6 COMPONENTS Core Gui Widgets OpenGLWidgets Svg SvgWidgets DBus REQUIRED)
 
 # Set include directories
 include_directories(
@@ -118,7 +118,10 @@ if(APPLE)
     if(MACDEPLOYQT_EXECUTABLE)
         # Run windeployqt after build
         add_custom_command(TARGET nwss-cnc POST_BUILD
-            COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_FILE:nwss-cnc> -dmg"
+            COMMAND "${MACDEPLOYQT_EXECUTABLE}" "${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}.app"
+            "-hardened-runtime"
+            "-sign-for-notarization=noahskay@icloud.com"
+            "-codesign=noahskay@icloud.com"
             COMMENT "Deploying Qt dependencies..."
         )
     else()
@@ -156,6 +159,7 @@ elseif(WIN32)
         # Run windeployqt after build
         add_custom_command(TARGET nwss-cnc POST_BUILD
             COMMAND "${WINDEPLOYQT_EXECUTABLE}" "$<TARGET_FILE:nwss-cnc>"
+            "--no-translations"
             COMMENT "Deploying Qt dependencies..."
         )
     else()
@@ -186,6 +190,7 @@ target_link_libraries(nwss-cnc PRIVATE
     Qt6::OpenGLWidgets
     Qt6::Svg
     Qt6::SvgWidgets
+    Qt6::DBus
 )
 
 # Add additional include directories for the main executable
