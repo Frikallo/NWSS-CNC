@@ -27,7 +27,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Find Qt packages
-find_package(Qt6 COMPONENTS Core Gui Widgets OpenGLWidgets Svg SvgWidgets SerialPort REQUIRED)
+find_package(Qt6 COMPONENTS Core Gui Widgets OpenGLWidgets Svg SvgWidgets REQUIRED)
 
 # Set include directories
 include_directories(
@@ -35,7 +35,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include/core
     ${CMAKE_CURRENT_SOURCE_DIR}/include/gui
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
-    ${CMAKE_CURRENT_SOURCE_DIR}  # Include root directory
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 # Define source files for the core library
@@ -113,6 +113,18 @@ if(APPLE)
         MACOSX_BUNDLE_ICON_FILE "${MACOSX_BUNDLE_ICON_FILE}"
         MACOSX_BUNDLE_COPYRIGHT "${APP_COPYRIGHT}"
     )
+
+    find_program(MACDEPLOYQT_EXECUTABLE NAMES macdeployqt HINTS "${Qt6Core_DIR}/../../../bin")
+    if(MACDEPLOYQT_EXECUTABLE)
+        # Run windeployqt after build
+        add_custom_command(TARGET nwss-cnc POST_BUILD
+            COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_FILE:nwss-cnc> -dmg"
+            COMMENT "Deploying Qt dependencies..."
+        )
+    else()
+        message(WARNING "windeployqt not found! Skipping Qt dependency deployment.")
+    endif()
+    
     
     # macOS deployment
     install(TARGETS nwss-cnc BUNDLE DESTINATION .)
@@ -139,17 +151,11 @@ elseif(WIN32)
     
     install(TARGETS nwss-cnc RUNTIME DESTINATION ".")
     
-    # Fix for windeployqt - Find the correct path
     find_program(WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS "${Qt6Core_DIR}/../../../bin")
     if(WINDEPLOYQT_EXECUTABLE)
         # Run windeployqt after build
         add_custom_command(TARGET nwss-cnc POST_BUILD
-            COMMAND "${WINDEPLOYQT_EXECUTABLE}"
-                    --no-translations
-                    --no-system-d3d-compiler
-                    --no-opengl-sw
-                    --release
-                    "$<TARGET_FILE:nwss-cnc>"
+            COMMAND "${WINDEPLOYQT_EXECUTABLE}" "$<TARGET_FILE:nwss-cnc>"
             COMMENT "Deploying Qt dependencies..."
         )
     else()
@@ -169,52 +175,6 @@ elseif(WIN32)
     set(CPACK_PACKAGE_FILE_NAME "NWSS-CNC-${PROJECT_VERSION}-win64")
     set(CPACK_PACKAGE_INSTALL_DIRECTORY "NWSS-CNC")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
-    
-# Linux configuration
-else()
-    add_executable(nwss-cnc 
-        ${GUI_SOURCES} 
-        ${GUI_HEADERS}
-        ${RESOURCES}
-    )
-    
-    # Linux deployment
-    include(GNUInstallDirs)
-    install(TARGETS nwss-cnc RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
-    
-    # Install icon and desktop file
-    configure_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/resources/linux/nwss-cnc.desktop.in
-        ${CMAKE_CURRENT_BINARY_DIR}/nwss-cnc.desktop
-        @ONLY
-    )
-    
-    install(FILES "${APP_ICON_LINUX}"
-        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/256x256/apps"
-        RENAME "${APP_NAME}.png"
-    )
-    
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/nwss-cnc.desktop"
-        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications"
-    )
-    
-    # Install fonts for Linux
-    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/"
-        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/${APP_NAME}/fonts"
-    )
-    
-    # Linux packaging generators
-    set(CPACK_GENERATOR "TGZ;DEB;RPM")
-    
-    # Fix for Debian packaging - required maintainer field
-    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${APP_COMPANY} <info@nwss.org>")
-    set(CPACK_DEBIAN_PACKAGE_SECTION "graphics")
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, libqt6core6, libqt6gui6, libqt6widgets6, libqt6svg6, libqt6serialport6")
-    
-    # RPM package settings
-    set(CPACK_RPM_PACKAGE_LICENSE "Proprietary")
-    set(CPACK_RPM_PACKAGE_GROUP "Applications/Graphics")
-    set(CPACK_RPM_PACKAGE_REQUIRES "qt6-qtbase, qt6-qtsvg, qt6-qtserialport")
 endif()
 
 # Link libraries for the main executable
@@ -226,7 +186,6 @@ target_link_libraries(nwss-cnc PRIVATE
     Qt6::OpenGLWidgets
     Qt6::Svg
     Qt6::SvgWidgets
-    Qt6::SerialPort
 )
 
 # Add additional include directories for the main executable
