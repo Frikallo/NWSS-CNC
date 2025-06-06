@@ -344,13 +344,13 @@ void MainWindow::createToolBars()
 void MainWindow::createDockPanels()
 {   
     // Options panel dock
-    gcodeOptionsDock = new QDockWidget(tr("Options"), this);
+    gcodeOptionsDock = new QDockWidget(tr(""), this);
     gcodeOptionsDock->setWidget(gcodeOptionsPanel);
     gcodeOptionsDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
     addDockWidget(Qt::LeftDockWidgetArea, gcodeOptionsDock);
     
     // Tool panel dock
-    toolDock = new QDockWidget(tr("Tools"), this);
+    toolDock = new QDockWidget(tr(""), this);
     toolDock->setWidget(toolSelector);
     toolDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
     addDockWidget(Qt::LeftDockWidgetArea, toolDock);

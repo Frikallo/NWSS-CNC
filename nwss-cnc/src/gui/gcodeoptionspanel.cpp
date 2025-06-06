@@ -177,7 +177,7 @@ void GCodeOptionsPanel::setupToolTab()
     tabLayout->addStretch();
     
     // Add the tab to the tab widget
-    tabWidget->addTab(toolTab, "Tool");
+    // tabWidget->addTab(toolTab, "Tool");
 }
 
 void GCodeOptionsPanel::setupCuttingTab()

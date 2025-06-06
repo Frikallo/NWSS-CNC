@@ -280,12 +280,8 @@ private:
     // Undo stack for operations
     QUndoStack *m_undoStack;
     
-    // Properties panel dock widget
-    QDockWidget *m_propertiesDock;
-    
     void setupDesignerToolbar();
     void setupStatusBar();
-    void setupPropertiesPanel();
     void updateZoomLabel(int value);
     void updateTransformFields();
 };

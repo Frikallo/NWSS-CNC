@@ -1026,9 +1026,6 @@ SVGDesigner::SVGDesigner(QWidget *parent)
     m_designerView = new DesignerView(this);
     mainLayout->addWidget(m_designerView);
     
-    // Set up the properties panel
-    setupPropertiesPanel();
-    
     // Connect the zoom changed signal
     connect(m_designerView, &DesignerView::zoomChanged, this, &SVGDesigner::onSvgViewZoomChanged);
     
@@ -1173,117 +1170,6 @@ void SVGDesigner::setupStatusBar()
     
     // Add the status bar to the layout
     static_cast<QVBoxLayout*>(layout())->addLayout(statusLayout);
-}
-
-void SVGDesigner::setupPropertiesPanel()
-{
-    // Create the properties dock widget
-    m_propertiesDock = new QDockWidget(tr("Properties"));
-    m_propertiesDock->setAllowedAreas(Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
-    m_propertiesDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    
-    // Create the properties panel widget
-    QWidget *propertiesWidget = new QWidget();
-    QVBoxLayout *propertiesLayout = new QVBoxLayout(propertiesWidget);
-    
-    // Position and Size group
-    QGroupBox *transformGroup = new QGroupBox(tr("Position and Size"));
-    QFormLayout *transformLayout = new QFormLayout(transformGroup);
-    
-    // Position fields
-    QHBoxLayout *posLayout = new QHBoxLayout();
-    m_posXSpinBox = new QDoubleSpinBox();
-    m_posXSpinBox->setRange(-10000, 10000);
-    m_posXSpinBox->setDecimals(2);
-    m_posXSpinBox->setSingleStep(1.0);
-    m_posXSpinBox->setSuffix(" mm");
-    
-    m_posYSpinBox = new QDoubleSpinBox();
-    m_posYSpinBox->setRange(-10000, 10000);
-    m_posYSpinBox->setDecimals(2);
-    m_posYSpinBox->setSingleStep(1.0);
-    m_posYSpinBox->setSuffix(" mm");
-    
-    posLayout->addWidget(new QLabel("X:"));
-    posLayout->addWidget(m_posXSpinBox);
-    posLayout->addWidget(new QLabel("Y:"));
-    posLayout->addWidget(m_posYSpinBox);
-    
-    transformLayout->addRow(tr("Position:"), posLayout);
-    
-    // Scale fields
-    QHBoxLayout *scaleLayout = new QHBoxLayout();
-    m_scaleXSpinBox = new QDoubleSpinBox();
-    m_scaleXSpinBox->setRange(0.01, 100);
-    m_scaleXSpinBox->setDecimals(2);
-    m_scaleXSpinBox->setSingleStep(0.1);
-    m_scaleXSpinBox->setValue(1.0);
-    
-    m_scaleYSpinBox = new QDoubleSpinBox();
-    m_scaleYSpinBox->setRange(0.01, 100);
-    m_scaleYSpinBox->setDecimals(2);
-    m_scaleYSpinBox->setSingleStep(0.1);
-    m_scaleYSpinBox->setValue(1.0);
-    
-    m_lockAspectRatioCheckBox = new QCheckBox(tr("Lock"));
-    m_lockAspectRatioCheckBox->setChecked(true);
-    
-    scaleLayout->addWidget(new QLabel("X:"));
-    scaleLayout->addWidget(m_scaleXSpinBox);
-    scaleLayout->addWidget(new QLabel("Y:"));
-    scaleLayout->addWidget(m_scaleYSpinBox);
-    scaleLayout->addWidget(m_lockAspectRatioCheckBox);
-    
-    transformLayout->addRow(tr("Scale:"), scaleLayout);
-    
-    // Rotation field
-    m_rotationSpinBox = new QDoubleSpinBox();
-    m_rotationSpinBox->setRange(-360, 360);
-    m_rotationSpinBox->setDecimals(1);
-    m_rotationSpinBox->setSingleStep(15.0);
-    m_rotationSpinBox->setSuffix("°");
-    
-    transformLayout->addRow(tr("Rotation:"), m_rotationSpinBox);
-    
-    // Apply button
-    QPushButton *applyButton = new QPushButton(tr("Apply"));
-    transformLayout->addRow("", applyButton);
-    
-    // Add transformation group to properties layout
-    propertiesLayout->addWidget(transformGroup);
-    
-    // Add spacer at the bottom
-    propertiesLayout->addStretch();
-    
-    // Set the properties widget as the dock widget's content
-    m_propertiesDock->setWidget(propertiesWidget);
-    
-    // Connect signals
-    connect(applyButton, &QPushButton::clicked, this, &SVGDesigner::onApplyTransformClicked);
-    
-    // Connect scale lock checkbox
-    connect(m_scaleXSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            [this](double value) {
-                if (m_lockAspectRatioCheckBox->isChecked()) {
-                    m_scaleYSpinBox->blockSignals(true);
-                    m_scaleYSpinBox->setValue(value);
-                    m_scaleYSpinBox->blockSignals(false);
-                }
-            });
-    
-    connect(m_scaleYSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            [this](double value) {
-                if (m_lockAspectRatioCheckBox->isChecked()) {
-                    m_scaleXSpinBox->blockSignals(true);
-                    m_scaleXSpinBox->setValue(value);
-                    m_scaleXSpinBox->blockSignals(false);
-                }
-            });
-    
-    // Add dock widget to the main window
-    if (auto mainWindow = dynamic_cast<QMainWindow*>(parentWidget())) {
-        mainWindow->addDockWidget(Qt::RightDockWidgetArea, m_propertiesDock);
-    }
 }
 
 void SVGDesigner::loadSvgFile(const QString &filePath)

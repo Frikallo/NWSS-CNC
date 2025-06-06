@@ -502,9 +502,12 @@ void ToolSelector::refreshTools() {
 
 void ToolSelector::setupUI() {
     m_layout = new QHBoxLayout(this);
+    m_layout->setSizeConstraint(QLayout::SetFixedSize);
     m_layout->setContentsMargins(0, 0, 0, 0);
-    
+    m_layout->setSpacing(10);
     m_label = new QLabel("Tool:", this);
+    // add a left margin of 10px
+    m_label->setContentsMargins(10, 0, 0, 0);
     m_toolCombo = new QComboBox(this);
     m_manageButton = new QPushButton("Manage...", this);
     
