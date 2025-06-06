@@ -1,0 +1,67 @@
+name: Build Windows
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.5.0'
+        host: 'windows'
+        target: 'desktop'
+        modules: 'qtserialport qtsvg'
+        cache: true
+        
+    - name: Set up MSVC
+      uses: microsoft/setup-msbuild@v1.1
+      
+    - name: Configure CMake
+      run: |
+        cmake -B build -S nwss-cnc -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+        
+    - name: Build
+      run: |
+        cmake --build build --config Release --target nwss-cnc
+        
+    - name: Package
+      run: |
+        cmake --build build --config Release --target package_for_github
+        
+    - name: Find artifacts
+      run: |
+        Get-ChildItem -Path build -Recurse -Include "*.zip", "*.exe" | ForEach-Object { Write-Host $_.FullName }
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: nwss-cnc-windows
+        path: |
+          build/*.zip
+          build/*.exe
+          build/install/
+        retention-days: 30
+        
+    - name: Upload to release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          build/*.zip
+          build/*.exe
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
