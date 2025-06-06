@@ -40,12 +40,12 @@ jobs:
         submodules: recursive
     
     - name: Install Qt
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4
       with:
         version: '6.5.0'
         host: ${{ matrix.qt_host }}
         target: 'desktop'
-        modules: 'qtserialport qtsvg'
+        modules: 'qtserialport'
         cache: true
         
     - name: Set up MSVC (Windows only)

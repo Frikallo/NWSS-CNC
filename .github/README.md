@@ -73,7 +73,7 @@ You can extend the Windows workflow to include code signing by adding:
 To change Qt version, modify the `version` field in the workflows:
 ```yaml
 - name: Install Qt
-  uses: jurplel/install-qt-action@v3
+  uses: jurplel/install-qt-action@v4
   with:
     version: '6.6.0'  # Change this
 ```
