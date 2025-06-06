@@ -202,6 +202,24 @@ public:
      */
     bool toolExists(int toolId) const;
     
+    /**
+     * Get the default tools file path
+     * @return Path to the default tools file
+     */
+    std::string getDefaultToolsFilePath() const;
+    
+    /**
+     * Save tools to default location
+     * @return True if saved successfully
+     */
+    bool saveToDefaultLocation() const;
+    
+    /**
+     * Load tools from default location if it exists
+     * @return True if loaded successfully, false if file doesn't exist
+     */
+    bool loadFromDefaultLocation();
+
 private:
     std::map<int, Tool> m_tools;    // Map of tool ID to tool
     int m_nextToolId;               // Next available tool ID

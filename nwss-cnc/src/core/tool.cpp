@@ -6,6 +6,19 @@
 #include <iostream>
 #include <cmath>
 
+#ifdef _WIN32
+#include <shlobj.h>
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <unistd.h>
+#include <sys/types.h>
+#include <pwd.h>
+#elif defined(__linux__)
+#include <unistd.h>
+#include <sys/types.h>
+#include <pwd.h>
+#endif
+
 namespace nwss {
 namespace cnc {
 
@@ -130,7 +143,11 @@ bool Tool::isValid() const {
 
 // ToolRegistry implementation
 ToolRegistry::ToolRegistry() : m_nextToolId(1) {
-    loadDefaultTools();
+    // Try to load from the default location first
+    if (!loadFromDefaultLocation()) {
+        // If no saved tools file exists, load default tools
+        loadDefaultTools();
+    }
 }
 
 ToolRegistry::~ToolRegistry() = default;
@@ -463,6 +480,82 @@ bool ToolRegistry::toolExists(int toolId) const {
 
 int ToolRegistry::generateToolId() {
     return m_nextToolId++;
+}
+
+std::string ToolRegistry::getDefaultToolsFilePath() const {
+    std::string path;
+    
+#ifdef _WIN32
+    // Windows: Use AppData/Roaming/NWSS-CNC/
+    CHAR appDataPath[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appDataPath))) {
+        path = std::string(appDataPath) + "\\NWSS-CNC\\tools.dat";
+    } else {
+        path = "tools.dat"; // Fallback to current directory
+    }
+#elif defined(__APPLE__)
+    // macOS: Use ~/Library/Application Support/NWSS-CNC/
+    const char* home = getenv("HOME");
+    if (home) {
+        path = std::string(home) + "/Library/Application Support/NWSS-CNC/tools.dat";
+    } else {
+        struct passwd* pw = getpwuid(getuid());
+        if (pw && pw->pw_dir) {
+            path = std::string(pw->pw_dir) + "/Library/Application Support/NWSS-CNC/tools.dat";
+        } else {
+            path = "tools.dat"; // Fallback
+        }
+    }
+#else
+    // Linux: Use ~/.config/NWSS-CNC/
+    const char* home = getenv("HOME");
+    if (home) {
+        path = std::string(home) + "/.config/NWSS-CNC/tools.dat";
+    } else {
+        struct passwd* pw = getpwuid(getuid());
+        if (pw && pw->pw_dir) {
+            path = std::string(pw->pw_dir) + "/.config/NWSS-CNC/tools.dat";
+        } else {
+            path = "tools.dat"; // Fallback
+        }
+    }
+#endif
+    
+    return path;
+}
+
+bool ToolRegistry::saveToDefaultLocation() const {
+    std::string filePath = getDefaultToolsFilePath();
+    
+    // Create directory if it doesn't exist
+    size_t lastSlash = filePath.find_last_of("/\\");
+    if (lastSlash != std::string::npos) {
+        std::string dirPath = filePath.substr(0, lastSlash);
+        
+#ifdef _WIN32
+        // Create directory on Windows
+        CreateDirectoryA(dirPath.c_str(), NULL);
+#else
+        // Create directory on Unix-like systems
+        std::string mkdirCmd = "mkdir -p \"" + dirPath + "\"";
+        system(mkdirCmd.c_str());
+#endif
+    }
+    
+    return saveToFile(filePath);
+}
+
+bool ToolRegistry::loadFromDefaultLocation() {
+    std::string filePath = getDefaultToolsFilePath();
+    
+    // Check if file exists
+    std::ifstream file(filePath);
+    if (!file.good()) {
+        return false; // File doesn't exist
+    }
+    file.close();
+    
+    return loadFromFile(filePath);
 }
 
 } // namespace cnc

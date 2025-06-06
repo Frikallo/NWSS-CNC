@@ -22,7 +22,10 @@ ToolManager::ToolManager(ToolRegistry& toolRegistry, QWidget* parent)
     refreshToolTable();
 }
 
-ToolManager::~ToolManager() = default;
+ToolManager::~ToolManager() {
+    // Ensure tool registry is saved when dialog is closed
+    m_toolRegistry.saveToDefaultLocation();
+}
 
 int ToolManager::getSelectedToolId() const {
     return m_selectedToolId;
@@ -344,6 +347,9 @@ void ToolManager::onAddTool() {
     selectToolInTable(toolId);
     clearToolEditor();
     
+    // Save to persistent storage
+    m_toolRegistry.saveToDefaultLocation();
+    
     emit toolRegistryChanged();
 }
 
@@ -359,6 +365,10 @@ void ToolManager::onEditTool() {
         refreshToolTable();
         selectToolInTable(m_selectedToolId);
         clearToolEditor();
+        
+        // Save to persistent storage
+        m_toolRegistry.saveToDefaultLocation();
+        
         emit toolRegistryChanged();
     }
 }
@@ -379,6 +389,10 @@ void ToolManager::onDeleteTool() {
         refreshToolTable();
         clearToolEditor();
         m_selectedToolId = 0;
+        
+        // Save to persistent storage
+        m_toolRegistry.saveToDefaultLocation();
+        
         emit toolRegistryChanged();
     }
 }
@@ -397,6 +411,9 @@ void ToolManager::onDuplicateTool() {
     refreshToolTable();
     selectToolInTable(toolId);
     
+    // Save to persistent storage
+    m_toolRegistry.saveToDefaultLocation();
+    
     emit toolRegistryChanged();
 }
 
@@ -407,6 +424,10 @@ void ToolManager::onImportTools() {
     if (!fileName.isEmpty()) {
         if (m_toolRegistry.loadFromFile(fileName.toStdString())) {
             refreshToolTable();
+            
+            // Save to persistent storage
+            m_toolRegistry.saveToDefaultLocation();
+            
             emit toolRegistryChanged();
             QMessageBox::information(this, "Import Successful", "Tools imported successfully.");
         } else {
@@ -540,9 +561,18 @@ void ToolSelector::onToolChanged() {
 
 void ToolSelector::onManageTools() {
     ToolManager manager(m_toolRegistry, this);
-    if (manager.exec() == QDialog::Accepted) {
+    
+    // Connect signals to handle changes during the manager session
+    connect(&manager, &ToolManager::toolRegistryChanged,
+            this, &ToolSelector::refreshTools);
+    
+    int result = manager.exec();
+    
+    // Always refresh after the dialog closes to ensure we have the latest tools
+    populateToolCombo();
+    
+    if (result == QDialog::Accepted) {
         int selectedId = manager.getSelectedToolId();
-        populateToolCombo();
         setSelectedTool(selectedId);
     }
 }

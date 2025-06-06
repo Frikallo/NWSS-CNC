@@ -6,11 +6,20 @@ GCodeOptionsPanel::GCodeOptionsPanel(QWidget *parent)
     : QWidget(parent),
       isMetric(true)
 {
-    QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setSpacing(10);
+    // Create main horizontal layout to center the content
+    QHBoxLayout *horizontalLayout = new QHBoxLayout(this);
+    horizontalLayout->setContentsMargins(10, 0, 10, 0);
+    
+    // Add very small stretches on both sides to center the content
+    horizontalLayout->addStretch(1);
+    
+    // Create the content widget that contains all the controls
+    QWidget *contentWidget = new QWidget();
+    contentLayout = new QVBoxLayout(contentWidget);
+    contentLayout->setSpacing(10);
     
     // Create tab widget
-    tabWidget = new QTabWidget(this);
+    tabWidget = new QTabWidget(contentWidget);
     
     // Set up the various option groups
     setupMachineTab();
@@ -19,7 +28,7 @@ GCodeOptionsPanel::GCodeOptionsPanel(QWidget *parent)
     setupTransformTab();
     setupAdvancedTab();
     
-    mainLayout->addWidget(tabWidget);
+    contentLayout->addWidget(tabWidget);
     
     // Setup profile buttons
     setupProfileButtons();
@@ -27,10 +36,14 @@ GCodeOptionsPanel::GCodeOptionsPanel(QWidget *parent)
     // Generate button
     generateButton = new QPushButton("Generate GCode");
     generateButton->setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;");
-    mainLayout->addWidget(generateButton);
+    contentLayout->addWidget(generateButton);
     
     // Add a stretch at the bottom
-    mainLayout->addStretch();
+    contentLayout->addStretch();
+    
+    // Add the content widget to the horizontal layout (give it most of the space)
+    horizontalLayout->addWidget(contentWidget, 39);  // Give content widget 38 parts (95% of space)
+    horizontalLayout->addStretch(1);  // Very small stretch on the right
     
     // Connect signals
     connect(generateButton, &QPushButton::clicked, this, [this]() {
@@ -40,10 +53,6 @@ GCodeOptionsPanel::GCodeOptionsPanel(QWidget *parent)
     connect(metricUnitsCheckBox, &QCheckBox::toggled, this, &GCodeOptionsPanel::updateUnitDisplay);
     connect(materialThicknessSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &GCodeOptionsPanel::onMaterialChanged);
     connect(cutDepthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &GCodeOptionsPanel::recalculatePassCount);
-    
-    // Set fixed width for panel
-    setMinimumWidth(300);
-    setMaximumWidth(350);
     
     // Load settings from the last session
     QTimer::singleShot(100, this, &GCodeOptionsPanel::loadSettings);
@@ -631,8 +640,7 @@ void GCodeOptionsPanel::setupProfileButtons()
     connect(loadProfileButton, &QPushButton::clicked, this, &GCodeOptionsPanel::loadProfile);
     profileLayout->addWidget(loadProfileButton);
     
-    // Add the profile buttons layout before the generate button
-    static_cast<QVBoxLayout*>(layout())->insertLayout(1, profileLayout);
+    contentLayout->insertLayout(1, profileLayout);
 }
 
 void GCodeOptionsPanel::saveSettings()

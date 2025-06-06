@@ -808,6 +808,10 @@ void MainWindow::showToolManager()
     connect(&toolManager, &nwss::cnc::ToolManager::toolRegistryChanged,
             toolSelector, &nwss::cnc::ToolSelector::refreshTools);
     
+    // Connect to our own handler for registry changes
+    connect(&toolManager, &nwss::cnc::ToolManager::toolRegistryChanged,
+            this, &MainWindow::onToolRegistryChanged);
+    
     // If a tool is selected in the manager dialog, update our selector
     connect(&toolManager, &nwss::cnc::ToolManager::toolSelected,
             this, [this](int toolId) {

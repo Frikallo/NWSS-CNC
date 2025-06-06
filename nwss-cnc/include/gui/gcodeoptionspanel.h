@@ -151,6 +151,7 @@ private:
     
     bool isMetric;
     QString m_currentSvgFile;
+    QVBoxLayout *contentLayout;  // Layout for the centered content
 };
 
 #endif // GCODEOPTIONSPANEL_H
