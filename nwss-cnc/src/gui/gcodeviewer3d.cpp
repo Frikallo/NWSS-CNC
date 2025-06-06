@@ -696,7 +696,7 @@ QVector3D GCodeViewer3D::mapToSphere(const QPointF& point) {
     QPointF cubeCenter(m_cubePosition.x() + m_cubeSize/2, m_cubePosition.y() + m_cubeSize/2);
     QPointF p = (point - cubeCenter) / (m_cubeSize/2);
     
-    // Clamp to boundary of sphere
+    // Clamp to boundary of sphere for proper arcball behavior
     double lengthSquared = p.x() * p.x() + p.y() * p.y();
     if (lengthSquared > 1.0) {
         double norm = 1.0 / sqrt(lengthSquared);
@@ -705,83 +705,72 @@ QVector3D GCodeViewer3D::mapToSphere(const QPointF& point) {
     }
     
     // Convert to 3D point on arcball sphere
+    // Use standard arcball mapping with proper Z calculation
     double z = sqrt(1.0 - lengthSquared);
-    return QVector3D(p.x(), p.y(), z);
+    
+    // Return normalized vector - this represents a point on the unit sphere
+    // The Y coordinate is flipped to match OpenGL screen coordinate conventions
+    return QVector3D(p.x(), -p.y(), z).normalized();
 }
 
 void GCodeViewer3D::rotateCubeByMouse(const QPoint& from, const QPoint& to)
 {
-    // Convert screen points to points on the virtual sphere
-    QVector3D v1 = mapToSphere(from);
-    QVector3D v2 = mapToSphere(to);
+    // Calculate mouse movement delta
+    int deltaX = to.x() - from.x();
+    int deltaY = to.y() - from.y();
     
-    // Compute the axis of rotation (cross product of vectors)
-    QVector3D axis = QVector3D::crossProduct(v1, v2);
-    if (axis.length() < 0.00001) return; // No rotation needed
+    // Use the new constrained axes rotation for better UX
+    rotateCubeByConstrainedAxes(deltaX, deltaY);
+}
+
+void GCodeViewer3D::rotateCubeByConstrainedAxes(int deltaX, int deltaY)
+{
+    // Skip if no movement
+    if (deltaX == 0 && deltaY == 0) return;
     
-    // Compute the angle of rotation
-    axis.normalize();
-    double dot = QVector3D::dotProduct(v1, v2);
-    dot = qBound(-1.0, dot, 1.0); // Clamp to avoid domain errors
+    // Convert pixel movement to rotation angles
+    // Sensitivity factor - can be adjusted for user preference
+    float sensitivity = 0.75f;
+    float yawAngle = -deltaX * sensitivity;   // Horizontal movement -> Z-axis rotation (yaw) - negative for proper CAD feel
+    float pitchAngle = -deltaY * sensitivity; // Vertical movement -> X-axis rotation (pitch) - negative for proper CAD feel
     
-    double angle = acos(dot) * 180.0 / M_PI;
+    // Create separate rotations for yaw and pitch in world space
+    // For CAD-style rotation: drag left = rotate counter-clockwise around Z, drag up = rotate around X
+    QQuaternion yawRotation = QQuaternion::fromAxisAndAngle(QVector3D(0, 0, 1), yawAngle);   // Yaw around world Z-axis
+    QQuaternion pitchRotation = QQuaternion::fromAxisAndAngle(QVector3D(1, 0, 0), pitchAngle); // Pitch around world X-axis
     
-    // Create quaternion for this rotation
-    QQuaternion newRotation = QQuaternion::fromAxisAndAngle(axis, angle);
+    // Apply rotations in the correct order for intuitive control
+    QQuaternion combinedRotation = yawRotation * pitchRotation;
     
-    // Apply rotation to current orientation - both cube and view orientation
-    m_cubeOrientation = newRotation * m_cubeOrientation;
-    m_viewOrientation = m_cubeOrientation; // Keep these in sync
-    
-    // Calculate new camera position based on orientation
-    float distance = (cameraPosition - cameraTarget).length();
-    
-    // Start with a base direction vector (0, 0, distance)
-    QVector3D baseDir(0, -distance, 0);
-    
-    // Create rotation matrix from view orientation
-    QMatrix4x4 rotMat;
-    rotMat.setToIdentity();
-    rotMat.rotate(m_viewOrientation);
-    
-    // Apply rotation to get new camera position
-    QVector3D newDir = rotMat.map(baseDir);
-    
-    // Update camera position while keeping target fixed at rotation center
-    cameraPosition = m_rotationCenter + newDir;
-    cameraTarget = m_rotationCenter; // Ensure target stays at rotation center
-    
-    // Update view matrix
-    view.setToIdentity();
-    view.lookAt(cameraPosition, cameraTarget, QVector3D(0.0f, 0.0f, 1.0f));
-    
-    update();
+    // Apply the world-space rotation
+    applyCubeRotation(combinedRotation);
 }
 
 void GCodeViewer3D::applyCubeRotation(const QQuaternion& rotation)
 {
     // Apply the rotation to BOTH the cube and scene view
-    m_viewOrientation = rotation * m_viewOrientation;
-    m_cubeOrientation = m_viewOrientation; // Keep both in sync
+    m_cubeOrientation = rotation * m_cubeOrientation;
+    m_viewOrientation = m_cubeOrientation; // Keep both in perfect sync
     
-    // Calculate new camera position based on orientation
-    float distance = (cameraPosition - cameraTarget).length();
+    // Calculate new camera position based on updated orientation
+    float distance = (cameraPosition - m_rotationCenter).length();
     
-    // Start with a base direction vector (0, 0, distance)
-    QVector3D baseDir(0, -distance, 0);
+    // Start with the default camera direction (looking along negative Y)
+    QVector3D defaultCameraDir(0, -1, 0);
     
-    // Rotate by the current view orientation
+    // Apply the current orientation to get the new camera direction
     QMatrix4x4 rotMat;
     rotMat.setToIdentity();
     rotMat.rotate(m_viewOrientation);
     
-    QVector3D newDir = rotMat.map(baseDir);
+    QVector3D newCameraDir = rotMat.mapVector(defaultCameraDir);
+    newCameraDir.normalize();
     
-    // Update camera position while keeping target fixed at rotation center
-    cameraPosition = m_rotationCenter + newDir;
-    cameraTarget = m_rotationCenter; // Ensure target stays at the rotation center
+    // Position camera at the correct distance along the new direction
+    cameraPosition = m_rotationCenter - newCameraDir * distance;
+    cameraTarget = m_rotationCenter; // Always look at the rotation center
     
-    // Update view matrix
+    // Update view matrix with Z-up orientation (consistent with CAD standards)
     view.setToIdentity();
     view.lookAt(cameraPosition, cameraTarget, QVector3D(0.0f, 0.0f, 1.0f));
     
@@ -830,13 +819,13 @@ void GCodeViewer3D::updateAnimation()
     cameraPosition = m_startCameraPosition + smoothT * (m_targetCameraPosition - m_startCameraPosition);
     cameraTarget = m_rotationCenter; // Always keep target at rotation center
     
-    // Interpolate orientation (slerp)
+    // Interpolate orientation (slerp) - this is the key to smooth synchronized rotation
     m_viewOrientation = QQuaternion::slerp(m_startOrientation, m_targetOrientation, smoothT);
     
-    // Keep cube orientation in sync with view orientation
+    // Keep cube orientation in perfect sync with view orientation
     m_cubeOrientation = m_viewOrientation;
     
-    // Update view matrix
+    // Update view matrix with Z-up orientation (consistent with CAD standards)
     view.setToIdentity();
     view.lookAt(cameraPosition, cameraTarget, QVector3D(0.0f, 0.0f, 1.0f));
     
@@ -849,23 +838,27 @@ void GCodeViewer3D::setIsometricView()
     // Distance from origin
     float distance = 500.0f;
     
-    // Create an isometric view
-    QVector3D isoDirection(1.0f, -1.0f, 1.0f);
+    // Create a proper isometric view direction 
+    // Standard isometric: camera positioned to look down at 30° from horizontal
+    QVector3D isoDirection(1.0f, 1.0f, 1.0f);  // Classic isometric direction
     isoDirection.normalize();
     
-    // Position camera for isometric projection with origin as target
-    cameraTarget = m_rotationCenter; // Always set to origin or defined rotation center
-    cameraPosition = cameraTarget + isoDirection * distance;
+    // Set target to rotation center and position camera at distance
+    cameraTarget = m_rotationCenter;
+    cameraPosition = m_rotationCenter + isoDirection * distance;  // Camera looks FROM this position TO the target
+    
+    // For a proper right-side-up view, we need to set up the orientation correctly
+    // The camera should look from the isometric position toward the target
+    QVector3D lookDirection = (cameraTarget - cameraPosition).normalized();
     
     // Calculate the corresponding orientation quaternion
-    QVector3D forward = (cameraTarget - cameraPosition).normalized();
-    QVector3D worldForward(0.0f, -1.0f, 0.0f); // Initial view direction
+    QVector3D defaultDirection(0.0f, -1.0f, 0.0f); // Default camera looks along negative Y
     
-    // Find the axis and angle to rotate from worldForward to forward
-    QVector3D axis = QVector3D::crossProduct(worldForward, forward);
+    // Find the axis and angle to rotate from default to target direction
+    QVector3D axis = QVector3D::crossProduct(defaultDirection, lookDirection);
     if (axis.length() < 0.001f) {
-        // Vectors are parallel or opposite - find another axis
-        if (QVector3D::dotProduct(worldForward, forward) < 0) {
+        // Vectors are parallel or opposite
+        if (QVector3D::dotProduct(defaultDirection, lookDirection) < 0) {
             // Opposite directions - rotate 180 degrees around any perpendicular axis
             axis = QVector3D(0, 0, 1);
             m_viewOrientation = QQuaternion::fromAxisAndAngle(axis, 180.0f);
@@ -876,16 +869,16 @@ void GCodeViewer3D::setIsometricView()
     } else {
         // Normal case - calculate rotation
         axis.normalize();
-        float angle = acos(QVector3D::dotProduct(worldForward, forward)) * 180.0f / M_PI;
+        float angle = acos(qBound(-1.0, (double)QVector3D::dotProduct(defaultDirection, lookDirection), 1.0)) * 180.0f / M_PI;
         m_viewOrientation = QQuaternion::fromAxisAndAngle(axis, angle);
     }
     
-    // Keep cube orientation in sync with view orientation
+    // Keep cube orientation in perfect sync with view orientation
     m_cubeOrientation = m_viewOrientation;
     
-    // Update view matrix
+    // Update view matrix with Z-up orientation (standard for CAD applications)
     view.setToIdentity();
-    view.lookAt(cameraPosition, cameraTarget, QVector3D(0.0f, 0.0f, 1.0f));
+    view.lookAt(cameraPosition, cameraTarget, QVector3D(0.0f, 0.0f, 1.0f));  // Z is up
 }
 
 void GCodeViewer3D::setupGridShaders()
@@ -1531,44 +1524,51 @@ void GCodeViewer3D::mouseMoveEvent(QMouseEvent *event)
         int dx = event->pos().x() - lastMousePos.x();
         int dy = event->pos().y() - lastMousePos.y();
         
-        // Skip very small movements for better performance
-        if (abs(dx) < 2 && abs(dy) < 2) {
-            lastMousePos = event->pos();
-            return;
-        }
-        
-        // Calculate pan speed based on scale (slower pan when zoomed in)
-        float panSpeed = 1.0f / scale;
-        
-        // Extract the camera right and up vectors from the view matrix
-        QVector3D rightVector(view(0, 0), view(0, 1), view(0, 2));
-        QVector3D upVector(view(1, 0), view(1, 1), view(1, 2));
-        
-        // Project these vectors onto the XY plane to prevent Z drift
-        rightVector.setZ(0);
-        upVector.setZ(0);
-        
-        // Normalize if they're not zero vectors
-        if (rightVector.length() > 0.001f) {
-            rightVector.normalize();
-        }
-        if (upVector.length() > 0.001f) {
-            upVector.normalize();
-        }
-        
-        // Get movement vector for pan
-        QVector3D movement = -rightVector * dx * panSpeed + upVector * dy * panSpeed;
-        
-        // Apply the movement to camera position and target
-        cameraPosition += movement;
-        cameraTarget += movement;
-        m_rotationCenter += movement; // Move the rotation center when panning
-        
-        // During drag - allow more time between updates for large models
-        // This is a key optimization to reduce CPU/GPU load during panning
-        if (dragTimer.elapsed() > 33) { // ~30 fps max during panning
+        // Check if Shift key is pressed for rotation (CAD-style interaction)
+        if (event->modifiers() & Qt::ShiftModifier) {
+            // Shift+Drag = Rotate view (like CAD software)
+            setCursor(Qt::ClosedHandCursor);  // Visual feedback for rotation mode
+            rotateCubeByConstrainedAxes(dx, dy);
+            
+            // Update immediately for smooth rotation
             update();
-            dragTimer.restart();
+        } else {
+            // Normal drag = Pan view
+            setCursor(Qt::OpenHandCursor);  // Visual feedback for pan mode
+            
+            // Calculate pan speed based on scale (slower pan when zoomed in)
+            float panSpeed = 1.0f / scale;
+            
+            // Extract the camera right and up vectors from the view matrix
+            QVector3D rightVector(view(0, 0), view(0, 1), view(0, 2));
+            QVector3D upVector(view(1, 0), view(1, 1), view(1, 2));
+            
+            // Project these vectors onto the XY plane to prevent Z drift
+            rightVector.setZ(0);
+            upVector.setZ(0);
+            
+            // Normalize if they're not zero vectors
+            if (rightVector.length() > 0.001f) {
+                rightVector.normalize();
+            }
+            if (upVector.length() > 0.001f) {
+                upVector.normalize();
+            }
+            
+            // Get movement vector for pan
+            QVector3D movement = -rightVector * dx * panSpeed + upVector * dy * panSpeed;
+            
+            // Apply the movement to camera position and target
+            cameraPosition += movement;
+            cameraTarget += movement;
+            m_rotationCenter += movement; // Move the rotation center when panning
+            
+            // During drag - allow more time between updates for large models
+            // This is a key optimization to reduce CPU/GPU load during panning
+            if (dragTimer.elapsed() > 33) { // ~30 fps max during panning
+                update();
+                dragTimer.restart();
+            }
         }
     } else {
         // Reset drag state when no button is pressed
@@ -1650,6 +1650,9 @@ void GCodeViewer3D::mouseReleaseEvent(QMouseEvent *event)
             
             event->accept();
         } else {
+            // Reset cursor on mouse release
+            setCursor(Qt::ArrowCursor);
+            
             // Force a full quality redraw on mouse release
             m_needsCompleteRedraw = true;
             update();

@@ -72,9 +72,10 @@ private:
     void animateToView(const QVector3D& targetPosition, const QVector3D& targetTarget);
     void updateAnimation();
     
-    // Arcball rotation methods
-    QVector3D mapToSphere(const QPointF& point);
-    void rotateCubeByMouse(const QPoint& from, const QPoint& to);
+    // View cube rotation methods
+    QVector3D mapToSphere(const QPointF& point);  // Legacy arcball method (kept for compatibility)
+    void rotateCubeByMouse(const QPoint& from, const QPoint& to);  // Constrained-axis rotation
+    void rotateCubeByConstrainedAxes(int deltaX, int deltaY);  // Helper for constrained rotation
     void applyCubeRotation(const QQuaternion& rotation);
     void animateToViewDirection(const QVector3D& direction);
 
