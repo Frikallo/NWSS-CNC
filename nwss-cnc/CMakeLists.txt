@@ -120,8 +120,6 @@ if(APPLE)
         add_custom_command(TARGET nwss-cnc POST_BUILD
             COMMAND "${MACDEPLOYQT_EXECUTABLE}" "${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}.app"
             "-hardened-runtime"
-            "-sign-for-notarization=noahskay@icloud.com"
-            "-codesign=noahskay@icloud.com"
             COMMENT "Deploying Qt dependencies..."
         )
     else()

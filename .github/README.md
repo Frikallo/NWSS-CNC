@@ -28,22 +28,51 @@ This directory contains GitHub Actions workflows for building and packaging the 
 
 ### Advanced Setup (With Code Signing)
 
-#### For macOS Code Signing (Optional)
+#### For macOS Code Signing and Notarization
 Add these secrets to your repository (Settings → Secrets and variables → Actions):
 
-- `APPLE_CERTIFICATE_P12`: Base64-encoded .p12 certificate file
+**Required for code signing:**
+- `APPLE_CERTIFICATE_P12`: Base64-encoded .p12 certificate file (Developer ID Application certificate)
 - `APPLE_CERTIFICATE_PASSWORD`: Password for the .p12 file  
-- `APPLE_SIGNING_IDENTITY`: Code signing identity (e.g., "Developer ID Application: Your Name")
+- `APPLE_SIGNING_IDENTITY`: Code signing identity (e.g., "Developer ID Application: Your Name (TEAM_ID)")
+
+**Optional for notarization (recommended for distribution):**
+- `APPLE_ID`: Your Apple ID email address
+- `APPLE_ID_PASSWORD`: App-specific password for your Apple ID
+- `APPLE_TEAM_ID`: Your Apple Developer Team ID
 
 To create the base64 certificate:
 ```bash
 base64 -i your_certificate.p12 | pbcopy
 ```
 
-#### For Windows Code Signing (Optional)
-You can extend the Windows workflow to include code signing by adding:
-- Certificate file as a secret
-- Signing tools like `signtool.exe`
+To get an app-specific password:
+1. Go to [appleid.apple.com](https://appleid.apple.com)
+2. Sign in and go to "App-Specific Passwords"
+3. Generate a new password for "GitHub Actions"
+
+#### For Windows Code Signing
+Add these secrets to your repository (Settings → Secrets and variables → Actions):
+
+- `WINDOWS_CERTIFICATE_P12`: Base64-encoded .p12/.pfx certificate file (Code Signing Certificate)
+- `WINDOWS_CERTIFICATE_PASSWORD`: Password for the certificate file
+
+To create the base64 certificate:
+```powershell
+# PowerShell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("your_certificate.p12")) | clip
+```
+
+```bash
+# macOS/Linux
+base64 -i your_certificate.p12 | pbcopy  # macOS
+base64 -i your_certificate.p12 | xclip   # Linux
+```
+
+**Getting a Windows Code Signing Certificate:**
+- Purchase from a Certificate Authority (CA) like DigiCert, Sectigo, or GlobalSign
+- Use Extended Validation (EV) certificates for better Windows SmartScreen reputation
+- Standard code signing certificates work but may show warnings initially
 
 ## How It Works
 

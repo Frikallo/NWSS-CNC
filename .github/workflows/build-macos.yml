@@ -35,28 +35,59 @@ jobs:
       run: |
         cmake --build build --config Release --target nwss-cnc
         
-    - name: Sign application (if certificates are available)
+    - name: Sign and notarize application (if certificates are available)
       continue-on-error: true
       run: |
         if [ -n "${{ secrets.APPLE_CERTIFICATE_P12 }}" ]; then
           echo "Setting up code signing..."
-          # Create keychain
-          security create-keychain -p temp_password build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p temp_password build.keychain
+          
+          # Create temporary keychain
+          KEYCHAIN_PATH=~/build.keychain
+          KEYCHAIN_PASSWORD=temp_password_$(date +%s)
+          
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -t 3600 -u "$KEYCHAIN_PATH"
           
           # Import certificate
           echo "${{ secrets.APPLE_CERTIFICATE_P12 }}" | base64 --decode > certificate.p12
-          security import certificate.p12 -k build.keychain -P "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temp_password build.keychain
+          security import certificate.p12 -k "$KEYCHAIN_PATH" -P "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           
-          # Sign the app
-          codesign --force --deep --sign "${{ secrets.APPLE_SIGNING_IDENTITY }}" build/NWSS-CNC.app
+          # Sign the app bundle with entitlements and hardened runtime
+          codesign --force --deep --options runtime --sign "${{ secrets.APPLE_SIGNING_IDENTITY }}" build/NWSS-CNC.app
           
           # Verify signing
-          codesign --verify --verbose build/NWSS-CNC.app
+          codesign --verify --verbose=2 build/NWSS-CNC.app
+          echo "✅ Application signed successfully"
+          
+          # Notarize if Apple ID credentials are provided
+          if [ -n "${{ secrets.APPLE_ID }}" ] && [ -n "${{ secrets.APPLE_ID_PASSWORD }}" ]; then
+            echo "Starting notarization process..."
+            
+            # Create a zip for notarization
+            ditto -c -k --keepParent build/NWSS-CNC.app NWSS-CNC.zip
+            
+            # Submit for notarization
+            xcrun notarytool submit NWSS-CNC.zip \
+              --apple-id "${{ secrets.APPLE_ID }}" \
+              --password "${{ secrets.APPLE_ID_PASSWORD }}" \
+              --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+              --wait
+            
+            # Staple the notarization
+            xcrun stapler staple build/NWSS-CNC.app
+            echo "✅ Application notarized and stapled successfully"
+          else
+            echo "⚠️  Notarization skipped - Apple ID credentials not configured"
+          fi
+          
+          # Clean up
+          rm -f certificate.p12
+          security delete-keychain "$KEYCHAIN_PATH"
         else
-          echo "No signing certificates configured, skipping code signing"
+          echo "⚠️  No signing certificates configured, skipping code signing"
         fi
         
     - name: Create DMG
