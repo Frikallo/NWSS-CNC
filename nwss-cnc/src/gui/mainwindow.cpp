@@ -322,11 +322,9 @@ void MainWindow::createToolBars()
     viewToolBar = addToolBar(tr("View"));
     
     // Add a tab selector to the view toolbar
-    QFont f = viewToolBar->font();
-    f.setPointSize(12);
     QLabel *tabLabel = new QLabel(tr("View: "));
     tabLabel->setMargin(int(5));
-    tabLabel->setFont(f);
+    // Use application default font for consistency
     viewToolBar->addWidget(tabLabel);
     
     QComboBox *tabComboBox = new QComboBox();

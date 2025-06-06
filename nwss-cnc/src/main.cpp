@@ -4,6 +4,8 @@
 #include <QSurfaceFormat>
 #include <QIcon>
 #include <QStyleFactory>
+#include <QFontDatabase>
+#include <QDebug>
 
 int main(int argc, char *argv[])
 {
@@ -25,7 +27,33 @@ int main(int argc, char *argv[])
     // Use a modern style
     app.setStyle(QStyleFactory::create("Fusion"));
 
-    QFont defaultFont("Helvetica", 12);
+    // Load and set SF Pro as the default application font
+    QFont defaultFont;
+    
+    // Try to load SF Pro fonts
+    int sfRegularId = QFontDatabase::addApplicationFont(":/fonts/SF-Pro-Display-Regular.otf");
+    int sfBoldId = QFontDatabase::addApplicationFont(":/fonts/SF-Pro-Display-Bold.otf");
+    int sfMediumId = QFontDatabase::addApplicationFont(":/fonts/SF-Pro-Display-Medium.otf");
+    
+    if (sfRegularId != -1) {
+        // SF Pro fonts loaded successfully
+        QStringList fontFamilies = QFontDatabase::applicationFontFamilies(sfRegularId);
+        if (!fontFamilies.isEmpty()) {
+            defaultFont.setFamily(fontFamilies.at(0));
+            qDebug() << "SF Pro font loaded successfully:" << fontFamilies.at(0);
+        }
+    } else {
+        // Fallback to system SF font or Helvetica
+        #ifdef Q_OS_MACOS
+            defaultFont.setFamily("SF Pro Display");
+        #else
+            defaultFont.setFamily("Helvetica");
+        #endif
+        qDebug() << "Using system default font:" << defaultFont.family();
+    }
+    
+    // Set consistent font size across all platforms
+    defaultFont.setPointSize(13);
     app.setFont(defaultFont);
     
     // Create a more modern palette

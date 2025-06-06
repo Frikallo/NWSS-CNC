@@ -92,7 +92,12 @@ if(APPLE)
     set_source_files_properties(${APP_ICON_MACOS} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
     
     # Add fonts for macOS
-    set(RESOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/JetBrainsMono-Regular.ttf")
+    set(RESOURCE_FILES 
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/JetBrainsMono-Regular.ttf"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/SF-Pro-Display-Regular.otf"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/SF-Pro-Display-Bold.otf"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/SF-Pro-Display-Medium.otf"
+    )
     set_source_files_properties(${RESOURCE_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/fonts")
     
     add_executable(nwss-cnc MACOSX_BUNDLE 
