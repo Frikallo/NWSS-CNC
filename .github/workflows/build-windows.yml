@@ -47,7 +47,7 @@ jobs:
         Get-ChildItem -Path build -Recurse -Include "*.zip", "*.exe" | ForEach-Object { Write-Host $_.FullName }
         
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: nwss-cnc-windows
         path: |

@@ -85,7 +85,7 @@ jobs:
         cmake --build build --config Release --target package_for_github
         
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: nwss-cnc-macos
         path: |
