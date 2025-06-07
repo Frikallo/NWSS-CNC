@@ -7,6 +7,7 @@
 #include <cmath>
 
 #ifdef _WIN32
+#define NOMINMAX
 #include <shlobj.h>
 #include <windows.h>
 #elif defined(__APPLE__)

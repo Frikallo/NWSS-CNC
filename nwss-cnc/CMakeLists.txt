@@ -178,9 +178,11 @@ elseif(WIN32)
     )
     
     # Package with CPack
-    set(CPACK_GENERATOR "ZIP;NSIS")
+    set(CPACK_GENERATOR "NSIS")
     set(CPACK_PACKAGE_FILE_NAME "NWSS-CNC-${PROJECT_VERSION}-win64")
     set(CPACK_PACKAGE_INSTALL_DIRECTORY "NWSS-CNC")
+    set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/nwss-cnc-icon.ico")
+    set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/nwss-cnc-icon.ico")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
 endif()
 
