@@ -21,7 +21,7 @@ jobs:
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
       with:
-        version: '6.5.0'
+        version: '6.9.0'
         host: 'windows'
         target: 'desktop'
         modules: 'qtserialport'

@@ -184,6 +184,29 @@ elseif(WIN32)
     set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/nwss-cnc-icon.ico")
     set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/nwss-cnc-icon.ico")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    
+    # NSIS Desktop Shortcut Configuration
+    set(CPACK_NSIS_CREATE_ICONS_EXTRA
+        "CreateShortCut '$DESKTOP\\\\${APP_NAME}.lnk' '$INSTDIR\\\\nwss-cnc.exe' '' '$INSTDIR\\\\nwss-cnc.exe' 0"
+    )
+    set(CPACK_NSIS_DELETE_ICONS_EXTRA
+        "Delete '$DESKTOP\\\\${APP_NAME}.lnk'"
+    )
+    
+    # Alternative method using MENU_LINKS (creates Start Menu + Desktop shortcuts)
+    # set(CPACK_NSIS_MENU_LINKS
+    #     "nwss-cnc.exe" "${APP_NAME}"
+    # )
+    # set(CPACK_NSIS_CREATE_ICONS ON)
+    
+    # Optional: Add to Start Menu as well
+    set(CPACK_NSIS_MENU_LINKS
+        "nwss-cnc.exe" "${APP_NAME}"
+    )
+    
+    # Optional: Modify PATH (if needed)
+    # set(CPACK_NSIS_MODIFY_PATH ON)
+    
 endif()
 
 # Link libraries for the main executable
