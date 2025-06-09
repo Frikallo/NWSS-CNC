@@ -114,10 +114,29 @@ public:
     // Export the current design
     void exportAsSvg(const QString &filePath);
     
+    // Design bounding box controls
+    void showDesignBoundingBox(bool show);
+    void updateDesignBoundingBox();
+    void setDesignSize(double width, double height);
+    QRectF getDesignBounds() const { return m_currentDesignBounds; }
+    double getDesignScale() const { return m_designScale; }
+    
+    // Material and bed getters
+    double getMaterialWidth() const { return m_materialWidth; }
+    double getMaterialHeight() const { return m_materialHeight; }
+    double getBedWidth() const { return m_bedWidth; }
+    double getBedHeight() const { return m_bedHeight; }
+    
+    // SVG content management
+    QList<QGraphicsItem*> getSvgItems() const;
+    void updateSvgItemsTransform();
+    
 signals:
     void zoomChanged(double zoomFactor);
     void selectionChanged();
     void measureUpdated(double distance, double angle);
+    void designBoundsChanged(QRectF bounds, double scale);
+    void convertToGCode(const QString &svgFile, QRectF designBounds, double designScale, QPointF designOffset);
     
 protected:
     void wheelEvent(QWheelEvent *event) override;
@@ -141,6 +160,14 @@ private:
     void updateBoundaries();
     void updateCursor();
     QPointF snapToGrid(const QPointF &pos);
+    
+    // Bounding box helpers
+    void createDesignBoundingBox();
+    void createResizeHandles();
+    void updateResizeHandles();
+    void updateSizeLabels();
+    int getResizeHandleAt(const QPointF &pos);
+    void performResize(const QPointF &currentPos);
     
     // Main components
     QGraphicsScene *m_scene;
@@ -186,8 +213,29 @@ private:
     QPointF m_selectionStartPos;
     bool m_isMovingSelection;
     
+    // Resizable bounding box
+    QGraphicsRectItem *m_designBoundingBox;
+    QList<QGraphicsRectItem*> m_resizeHandles;
+    QGraphicsTextItem *m_widthLabel;
+    QGraphicsTextItem *m_heightLabel;
+    QRectF m_currentDesignBounds;
+    bool m_isResizing;
+    int m_activeResizeHandle;
+    QPointF m_resizeStartPos;
+    double m_designScale;
+    
+    // Bounding box movement
+    bool m_isMovingBoundingBox;
+    QPointF m_boundingBoxMoveStartPos;
+    
+    // SVG content tracking
+    QRectF m_originalSvgBounds;
+    QList<QGraphicsItem*> m_svgItems;
+    
     // Constants
     static const double RASTERIZATION_THRESHOLD;
+    static const double HANDLE_SIZE;
+    static const double MIN_DESIGN_SIZE;
 };
 
 class TransformCommand : public QUndoCommand
@@ -223,10 +271,13 @@ public:
     void setMaterialSize(double width, double height);
     void setBedSize(double width, double height);
     
+    // Design properties access
+    QRectF getDesignBounds() const;
+    double getDesignScale() const;
+    QPointF getDesignOffset() const;
+    
 signals:
     void svgLoaded(const QString &filePath);
-    void convertToGCode(const QString &svgFile);
-    void selectionChanged();
     
 public slots:
     void onZoomChanged(int value);
@@ -237,7 +288,6 @@ private slots:
     void onConvertClicked();
     void onFitToViewClicked();
     void onSvgViewZoomChanged(double zoomFactor);
-    void onSelectionChanged();
     void onMeasureUpdated(double distance, double angle);
     void onSelectToolClicked();
     void onMeasureToolClicked();
@@ -245,7 +295,7 @@ private slots:
     void onGridVisibilityChanged(bool visible);
     void onGridSpacingChanged(double spacing);
     void onSnapModeChanged(int index);
-    void onApplyTransformClicked();
+    void onDesignBoundsChanged(QRectF bounds, double scale);
     
 private:
     // UI Components
@@ -264,13 +314,7 @@ private:
     QPushButton *m_measureToolButton;
     QPushButton *m_panToolButton;
     
-    // Transform fields
-    QDoubleSpinBox *m_posXSpinBox;
-    QDoubleSpinBox *m_posYSpinBox;
-    QDoubleSpinBox *m_scaleXSpinBox;
-    QDoubleSpinBox *m_scaleYSpinBox;
-    QDoubleSpinBox *m_rotationSpinBox;
-    QCheckBox *m_lockAspectRatioCheckBox;
+
     
     // Grid and snap controls
     QCheckBox *m_gridVisibleCheckBox;
@@ -283,7 +327,6 @@ private:
     void setupDesignerToolbar();
     void setupStatusBar();
     void updateZoomLabel(int value);
-    void updateTransformFields();
 };
 
 #endif // SVGDESIGNER_H

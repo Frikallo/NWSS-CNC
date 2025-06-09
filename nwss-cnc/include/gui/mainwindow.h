@@ -12,6 +12,9 @@
 #include <QTabWidget>
 #include <QDockWidget>
 #include <QStackedWidget>
+#include <QtWidgets>
+#include <QTimer>
+#include <QProgressBar>
 #include "gcodeeditor.h"
 #include "gcodeviewer3d.h"
 #include "gcodeoptionspanel.h"
@@ -19,6 +22,9 @@
 #include "svgdesigner.h"
 #include "toolmanager.h"
 #include "core/tool.h"
+#include "core/config.h"
+#include "core/transform.h"
+#include "core/geometry.h"
 
 class MainWindow : public QMainWindow
 {
@@ -31,20 +37,23 @@ public:
 private slots:
     void newFile();
     void openFile();
+    void importSvgFile();
     bool saveFile();
     bool saveAsFile();
     void about();
+    void onGCodeChanged();
     void documentWasModified();
-    void updateGCodePreview();
     void showWelcomeDialog();
-    void importSvgFile();
-    void convertSvgToGCode(const QString &svgFile);
     void onTabChanged(int index);
+    void convertSvgToGCode(const QString &svgFile);
+    void updateGCodePreview();
     void showToolManager();
     void onToolSelected(int toolId);
     void onToolRegistryChanged();
 
 private:
+    // Design transformation is now handled directly in convertSvgToGCode
+
     void createActions();
     void createMenus();
     void createToolBars();

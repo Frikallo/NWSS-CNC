@@ -25,6 +25,9 @@
 #include "config.h"
 #include "transform.h"
 #include "gcode_generator.h"
+#include <QDebug>
+#include <QProgressBar>
+#include <sstream>
 
 class WelcomeDialog : public QDialog
 {
@@ -122,11 +125,13 @@ MainWindow::MainWindow(QWidget *parent)
     connect(tabWidget, &QTabWidget::currentChanged,
             this, &MainWindow::onTabChanged);
     connect(gcodeOptionsPanel, &GCodeOptionsPanel::generateGCode,
-            this, &MainWindow::convertSvgToGCode);
+            [this](const QString& svgFile) {
+                // Use default conversion without design bounds for the options panel
+                this->convertSvgToGCode(svgFile);
+            });
     
-    // Update these connections for svgDesigner
-    connect(svgDesigner, &SVGDesigner::convertToGCode,
-            this, &MainWindow::convertSvgToGCode);
+    // Note: SVG designer now integrates with the unified G-code generation system
+    // All G-code generation should go through the options panel button
     connect(svgDesigner, &SVGDesigner::svgLoaded, 
         [this](const QString& filePath) {
             gcodeOptionsPanel->setCurrentSvgFile(filePath);
@@ -591,31 +596,26 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
     }
     
     try {
-        // Step 1: Parse SVG
+        // Step 1: Parse SVG with the design transformation parameters
         nwss::cnc::SVGParser parser;
         if (!parser.loadFromFile(svgFile.toStdString(), "mm", 96.0f)) {
-            QMessageBox::warning(this, tr("SVG Error"),
-                                tr("Failed to load SVG file."));
+            QMessageBox::warning(this, tr("SVG Error"), 
+                                tr("Failed to load SVG file: %1").arg(svgFile));
             return;
         }
-        
-        // Step 2: Setup discretizer
-        nwss::cnc::Discretizer discretizer;
+
+        // Step 2: Configure discretizer
         nwss::cnc::DiscretizerConfig discretizerConfig;
         discretizerConfig.bezierSamples = gcodeOptionsPanel->getBezierSamples();
         discretizerConfig.simplifyTolerance = gcodeOptionsPanel->getSimplifyTolerance();
         discretizerConfig.adaptiveSampling = gcodeOptionsPanel->getAdaptiveSampling();
         discretizerConfig.maxPointDistance = gcodeOptionsPanel->getMaxPointDistance();
-        discretizer.setConfig(discretizerConfig);
-        
-        // Step 3: Discretize paths
-        std::vector<nwss::cnc::Path> paths = discretizer.discretizeImage(parser.getRawImage());
-        
-                 // Step 4: Setup CNC configuration
-         nwss::cnc::CNConfig config;
+
+        // Step 3: Configure CNC parameters
+        nwss::cnc::CNConfig config;
         config.setBedWidth(gcodeOptionsPanel->getBedWidth());
         config.setBedHeight(gcodeOptionsPanel->getBedHeight());
-        config.setUnitsFromString("mm");
+        config.setUnitsFromString(gcodeOptionsPanel->isMetricUnits() ? "mm" : "in");
         config.setMaterialWidth(gcodeOptionsPanel->getMaterialWidth());
         config.setMaterialHeight(gcodeOptionsPanel->getMaterialHeight());
         config.setMaterialThickness(gcodeOptionsPanel->getMaterialThickness());
@@ -626,19 +626,211 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
         config.setPassCount(gcodeOptionsPanel->getPassCount());
         config.setSafeHeight(gcodeOptionsPanel->getSafetyHeight());
         
-        // Step 5: Transform paths to fit material
-        nwss::cnc::TransformInfo transformInfo;
-        if (!nwss::cnc::Transform::fitToMaterial(paths, config, 
-                                                gcodeOptionsPanel->getPreserveAspectRatio(),
-                                                gcodeOptionsPanel->getCenterX(),
-                                                gcodeOptionsPanel->getCenterX(),  // Use same for Y
-                                                gcodeOptionsPanel->getFlipY(),
-                                                &transformInfo)) {
-            QMessageBox::warning(this, tr("Transform Error"),
-                                tr("Failed to fit paths to material."));
+        // Step 4: Discretize paths
+        nwss::cnc::Discretizer discretizer;
+        discretizer.setConfig(discretizerConfig);
+        std::vector<nwss::cnc::Path> paths = discretizer.discretizeImage(parser.getRawImage());
+
+        if (paths.empty()) {
+            QMessageBox::warning(this, tr("Conversion Error"),
+                                tr("No paths found in the SVG file."));
             return;
         }
+
+        // Step 5: Apply transformations based on designer settings
+        nwss::cnc::TransformInfo transformInfo;
+        transformInfo.success = true;
+        transformInfo.wasScaled = false;
+        transformInfo.wasCropped = false;
+        transformInfo.message = "Using designer transformations";
         
+        // Get design properties from the SVG designer
+        QRectF designBounds = svgDesigner->getDesignBounds();
+        double designScale = svgDesigner->getDesignScale();
+        QPointF designOffset = svgDesigner->getDesignOffset();
+        
+        qDebug() << "Converting SVG with design bounds:" << designBounds;
+        qDebug() << "Design scale:" << designScale;
+        qDebug() << "Design offset:" << designOffset;
+        
+        // Check if we have meaningful designer transformations
+        bool hasDesignerTransforms = (designScale != 1.0 || !designOffset.isNull() || 
+                                    (designBounds != QRectF() && !designBounds.isEmpty()));
+        
+        if (hasDesignerTransforms) {
+            qDebug() << "Applying designer transformations...";
+            
+            // Get original bounds of the paths
+            double origMinX, origMinY, origMaxX, origMaxY;
+            if (nwss::cnc::Transform::getBounds(paths, origMinX, origMinY, origMaxX, origMaxY)) {
+                double origWidth = origMaxX - origMinX;
+                double origHeight = origMaxY - origMinY;
+                
+                qDebug() << "Original path bounds:" << origMinX << origMinY << origMaxX << origMaxY;
+                qDebug() << "Original dimensions:" << origWidth << "x" << origHeight;
+                
+                // The designer transformations work like this:
+                // 1. The designBounds represents where the user wants the design to be positioned and sized
+                // 2. The designScale represents the uniform scale factor applied to maintain aspect ratio
+                // 3. We need to transform the paths to match the designer's intended result
+                
+                // Calculate how to transform the original paths to match the design bounds
+                // The designer uses uniform scaling, so we need to calculate the actual scale
+                double actualScaleX = designBounds.width() / origWidth;
+                double actualScaleY = designBounds.height() / origHeight;
+                
+                // Use uniform scaling to maintain aspect ratio (like the designer does)
+                double uniformScale = qMin(actualScaleX, actualScaleY);
+                
+                qDebug() << "Calculated uniform scale:" << uniformScale;
+                qDebug() << "Designer reported scale:" << designScale;
+                
+                // Apply the uniform scale and position transformation
+                for (auto& path : paths) {
+                    std::vector<nwss::cnc::Point2D>& points = const_cast<std::vector<nwss::cnc::Point2D>&>(path.getPoints());
+                    for (auto& point : points) {
+                        // Translate to origin
+                        point.x -= origMinX;
+                        point.y -= origMinY;
+                        
+                        // Apply uniform scale
+                        point.x *= uniformScale;
+                        point.y *= uniformScale;
+                        
+                        // Calculate centered position within design bounds
+                        double scaledWidth = origWidth * uniformScale;
+                        double scaledHeight = origHeight * uniformScale;
+                        
+                        // Center the scaled design within the design bounds
+                        double centerOffsetX = (designBounds.width() - scaledWidth) / 2.0;
+                        double centerOffsetY = (designBounds.height() - scaledHeight) / 2.0;
+                        
+                        // Apply final position
+                        point.x += designBounds.left() + centerOffsetX;
+                        point.y += designBounds.top() + centerOffsetY;
+                    }
+                }
+                
+                // Update transform info with correct values
+                transformInfo.origWidth = origWidth;
+                transformInfo.origHeight = origHeight;
+                transformInfo.origMinX = origMinX;
+                transformInfo.origMinY = origMinY;
+                transformInfo.newWidth = origWidth * uniformScale;
+                transformInfo.newHeight = origHeight * uniformScale;
+                transformInfo.newMinX = designBounds.left() + (designBounds.width() - transformInfo.newWidth) / 2.0;
+                transformInfo.newMinY = designBounds.top() + (designBounds.height() - transformInfo.newHeight) / 2.0;
+                transformInfo.scaleX = transformInfo.scaleY = uniformScale;
+                transformInfo.offsetX = transformInfo.newMinX;
+                transformInfo.offsetY = transformInfo.newMinY;
+                transformInfo.wasScaled = (uniformScale != 1.0);
+                
+                qDebug() << "Applied uniform scale:" << uniformScale;
+                qDebug() << "Final design position:" << transformInfo.newMinX << transformInfo.newMinY;
+                qDebug() << "Final design size:" << transformInfo.newWidth << "x" << transformInfo.newHeight;
+                
+                // Check if design exceeds material or bed bounds (using SVG designer's format)
+                double materialWidth = config.getMaterialWidth();
+                double materialHeight = config.getMaterialHeight();
+                double bedWidth = config.getBedWidth();
+                double bedHeight = config.getBedHeight();
+                
+                bool fitsInMaterial = true;
+                QStringList warnings;
+                
+                // Check if design extends beyond material boundaries (same as SVG designer)
+                if (designBounds.left() < 0) {
+                    warnings << tr("Design extends %1 mm beyond the left edge of the material").arg(-designBounds.left(), 0, 'f', 2);
+                    fitsInMaterial = false;
+                }
+                if (designBounds.top() < 0) {
+                    warnings << tr("Design extends %1 mm beyond the top edge of the material").arg(-designBounds.top(), 0, 'f', 2);
+                    fitsInMaterial = false;
+                }
+                if (designBounds.right() > materialWidth) {
+                    warnings << tr("Design extends %1 mm beyond the right edge of the material").arg(designBounds.right() - materialWidth, 0, 'f', 2);
+                    fitsInMaterial = false;
+                }
+                if (designBounds.bottom() > materialHeight) {
+                    warnings << tr("Design extends %1 mm beyond the bottom edge of the material").arg(designBounds.bottom() - materialHeight, 0, 'f', 2);
+                    fitsInMaterial = false;
+                }
+                
+                // Also check bed dimensions
+                if (designBounds.width() > bedWidth) {
+                    warnings << tr("Design width (%1 mm) exceeds bed width (%2 mm)").arg(designBounds.width(), 0, 'f', 2).arg(bedWidth, 0, 'f', 2);
+                    fitsInMaterial = false;
+                }
+                if (designBounds.height() > bedHeight) {
+                    warnings << tr("Design height (%1 mm) exceeds bed height (%2 mm)").arg(designBounds.height(), 0, 'f', 2).arg(bedHeight, 0, 'f', 2);
+                    fitsInMaterial = false;
+                }
+                
+                // Show warning dialog if design doesn't fit (same format as SVG designer)
+                if (!fitsInMaterial) {
+                    QMessageBox warningBox(this);
+                    warningBox.setIcon(QMessageBox::Warning);
+                    warningBox.setWindowTitle(tr("Design Size Warning"));
+                    warningBox.setText(tr("The design does not fit within the material boundaries."));
+                    
+                    QString detailText = tr("Material size: %1 x %2 mm\n")
+                                            .arg(materialWidth, 0, 'f', 1)
+                                            .arg(materialHeight, 0, 'f', 1);
+                    detailText += tr("Design size: %1 x %2 mm\n")
+                                     .arg(designBounds.width(), 0, 'f', 1)
+                                     .arg(designBounds.height(), 0, 'f', 1);
+                    detailText += tr("Design position: (%1, %2) mm\n")
+                                     .arg(designBounds.left(), 0, 'f', 1)
+                                     .arg(designBounds.top(), 0, 'f', 1);
+                    detailText += tr("Bed size: %1 x %2 mm\n\n")
+                                     .arg(bedWidth, 0, 'f', 1)
+                                     .arg(bedHeight, 0, 'f', 1);
+                    detailText += tr("Issues found:\n• %1").arg(warnings.join("\n• "));
+                    
+                    warningBox.setDetailedText(detailText);
+                    warningBox.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
+                    warningBox.setDefaultButton(QMessageBox::Cancel);
+                    warningBox.button(QMessageBox::Yes)->setText(tr("Continue Anyway"));
+                    warningBox.button(QMessageBox::Cancel)->setText(tr("Cancel"));
+                    
+                    int result = warningBox.exec();
+                    if (result != QMessageBox::Yes) {
+                        return;  // User cancelled
+                    }
+                    
+                    // User chose to continue, add warnings to transform info
+                    transformInfo.message += " - WARNING: Design exceeds bounds!";
+                    transformInfo.wasCropped = true;
+                }
+                
+                                 // Apply Y-flip if requested (after designer transformations)
+                 if (gcodeOptionsPanel->getFlipY()) {
+                     for (auto& path : paths) {
+                         std::vector<nwss::cnc::Point2D>& points = const_cast<std::vector<nwss::cnc::Point2D>&>(path.getPoints());
+                         for (auto& point : points) {
+                             point.y = materialHeight - point.y;
+                         }
+                     }
+                     transformInfo.message += " (Y-flipped)";
+                 }
+            }
+        } else {
+            // No meaningful designer transformations, use standard material fitting
+            qDebug() << "No designer transformations found, using standard material fitting...";
+            if (!nwss::cnc::Transform::fitToMaterial(paths, config, 
+                                                    gcodeOptionsPanel->getPreserveAspectRatio(),
+                                                    gcodeOptionsPanel->getCenterX(),
+                                                    gcodeOptionsPanel->getCenterY(),
+                                                    gcodeOptionsPanel->getFlipY(),
+                                                    &transformInfo)) {
+                QMessageBox::warning(this, tr("Transform Error"),
+                                    tr("Failed to fit paths to material."));
+                return;
+            }
+        }
+        
+        qDebug() << "Transform Info:" << transformInfo.message.c_str();
+
         // Step 6: Setup G-code generator with tool integration
         nwss::cnc::GCodeGenerator generator;
         generator.setConfig(config);
@@ -658,106 +850,73 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
         gCodeOptions.returnToOrigin = true;
         
         generator.setOptions(gCodeOptions);
-        
+
         // Step 7: Validate tool if selected (show warnings but don't block)
         if (selectedTool) {
             std::vector<std::string> warnings;
             if (!generator.validatePaths(paths, warnings)) {
-                // Summarize warnings instead of listing every single one
-                QString warningMsg = tr("Tool Validation Summary:\n\n");
-                warningMsg += tr("• Tool diameter: %1mm\n").arg(selectedTool->diameter);
-                warningMsg += tr("• Number of paths with issues: %1 out of %2\n").arg(warnings.size()).arg(paths.size());
-                
-                // Show only the first few unique warning types
-                QSet<QString> uniqueWarnings;
+                QString warningText = tr("Some features may be too small for the selected tool:\n");
                 for (const auto& warning : warnings) {
-                    QString warningStr = QString::fromStdString(warning);
-                    // Extract the warning type (remove path-specific details)
-                    if (warningStr.contains("Feature too small")) {
-                        uniqueWarnings.insert("Features are smaller than tool diameter");
-                    } else if (warningStr.contains("radius")) {
-                        uniqueWarnings.insert("Radius constraints violated");
-                    } else {
-                        uniqueWarnings.insert(warningStr);
-                    }
-                    
-                    // Limit to avoid huge dialogs
-                    if (uniqueWarnings.size() >= 3) break;
+                    warningText += QString("• %1\n").arg(QString::fromStdString(warning));
                 }
+                warningText += tr("\nContinue with G-code generation?");
                 
-                warningMsg += tr("\nIssues found:\n");
-                for (const QString& uniqueWarning : uniqueWarnings) {
-                    warningMsg += QString("• %1\n").arg(uniqueWarning);
+                int result = QMessageBox::question(this, tr("Tool Validation Warning"), 
+                                                 warningText,
+                                                 QMessageBox::Yes | QMessageBox::No,
+                                                 QMessageBox::Yes);
+                if (result != QMessageBox::Yes) {
+                    return;
                 }
-                
-                warningMsg += tr("\nRecommendation: Consider using a smaller tool (like 1/16\" or 1/32\" for fine details).");
-                warningMsg += tr("\n\nG-code will still be generated, but may not produce optimal results.");
-                
-                // Create a properly sized message box
-                QMessageBox msgBox(this);
-                msgBox.setWindowTitle(tr("Tool Validation Notice"));
-                msgBox.setText(warningMsg);
-                msgBox.setIcon(QMessageBox::Warning);
-                msgBox.setStandardButtons(QMessageBox::Ok);
-                msgBox.setDefaultButton(QMessageBox::Ok);
-                
-                // Ensure dialog is reasonably sized and scrollable if needed
-                msgBox.setDetailedText(tr("Click 'Show Details' to see all %1 specific warnings if needed.").arg(warnings.size()));
-                
-                msgBox.exec();
-                
-                // Also add a warning to the status bar
-                statusBar()->showMessage(tr("Warning: Tool may be too large for %1 features").arg(warnings.size()), 5000);
             }
         }
-        
+
         // Step 8: Generate G-code
-        std::string gcode = generator.generateGCodeString(paths);
+        std::string gCodeStd = generator.generateGCodeString(paths);
+        QString gCode = QString::fromStdString(gCodeStd);
         
-        if (gcode.empty()) {
-            QMessageBox::warning(this, tr("G-code Error"),
-                                tr("Failed to generate G-code."));
+        if (gCode.isEmpty()) {
+            QMessageBox::warning(this, tr("G-Code Generation Error"),
+                                tr("Failed to generate G-code from the SVG file."));
             return;
         }
-        
-        // Step 9: Calculate time estimate
-        auto timeEstimate = generator.calculateTimeEstimate(paths);
-        
-        // Format time as HH:MM:SS
-        int totalSeconds = static_cast<int>(timeEstimate.totalTime);
-        int hours = totalSeconds / 3600;
-        int minutes = (totalSeconds % 3600) / 60;
-        int seconds = totalSeconds % 60;
-        
-        QString timeString = QString("%1:%2:%3")
-                              .arg(hours, 2, 10, QChar('0'))
-                              .arg(minutes, 2, 10, QChar('0'))
-                              .arg(seconds, 2, 10, QChar('0'));
-        
-        // Update time estimate label
-        timeEstimateLabel->setText(tr("Est. time: %1").arg(timeString));
-        
-        // Update the GCode editor with the generated code
-        gCodeEditor->setPlainText(QString::fromStdString(gcode));
-        
-        // Switch to the 3d preview tab
-        tabWidget->setCurrentIndex(1);
-        
-        // Mark as untitled so user can save it
+
+        // Step 9: Display the generated G-code
+        gCodeEditor->setPlainText(gCode);
         setCurrentFile("");
         
-        QString successMsg = tr("SVG converted to GCode");
-        if (selectedTool) {
-            successMsg += tr(" using %1").arg(QString::fromStdString(selectedTool->name));
-        }
-        statusBar()->showMessage(successMsg, 3000);
+        // Add transformation info as comment at the top
+        QString transformComment = QString("( Design transformation applied )\n");
+        transformComment += QString("( Design size: %1 x %2 mm )\n")
+                               .arg(transformInfo.newWidth, 0, 'f', 2)
+                               .arg(transformInfo.newHeight, 0, 'f', 2);
+        transformComment += QString("( Design position: %1, %2 mm )\n")
+                               .arg(transformInfo.newMinX, 0, 'f', 2)
+                               .arg(transformInfo.newMinY, 0, 'f', 2);
+        transformComment += QString("( Design scale: %1 )\n").arg(transformInfo.scaleX, 0, 'f', 4);
+        transformComment += "\n";
         
+        QString fullGCode = transformComment + gCode;
+        gCodeEditor->setPlainText(fullGCode);
+
+        // Calculate time estimate
+        nwss::cnc::GCodeGenerator::TimeEstimate estimate = generator.calculateTimeEstimate(paths);
+        
+        statusBar()->showMessage(tr("G-Code generated successfully. Estimated time: %1 minutes")
+                               .arg(estimate.totalTime / 60.0, 0, 'f', 1), 5000);
+
     } catch (const std::exception& e) {
-        QMessageBox::critical(this, tr("Conversion Error"),
-                            tr("An error occurred during conversion: %1")
-                            .arg(QString::fromStdString(e.what())));
+        QMessageBox::critical(this, tr("Conversion Error"), 
+                            tr("An error occurred during conversion: %1").arg(e.what()));
     }
+    
+    // Update the viewers with the new G-code
+    updateGCodePreview();
 }
+
+// Note: The overloaded convertSvgToGCode method has been removed.
+// All G-code generation now goes through the unified convertSvgToGCode(const QString &svgFile) method
+// which gets design properties directly from the SVG designer.
 
 void MainWindow::onTabChanged(int index)
 {
@@ -776,6 +935,17 @@ void MainWindow::onTabChanged(int index)
     
     // If switching to 3D preview, update it
     if (index == 1) {
+        updateGCodePreview();
+    }
+}
+
+void MainWindow::onGCodeChanged()
+{
+    // Called when the G-Code editor content changes
+    documentWasModified();
+    
+    // Update the 3D preview if it's currently visible
+    if (tabWidget->currentIndex() == 1) { // 3D Preview tab
         updateGCodePreview();
     }
 }

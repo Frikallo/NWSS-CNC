@@ -46,4 +46,6 @@ jobs:
         path: |
           *.dmg
           build/*.dmg
+          *.app
+          build/*.app
         retention-days: 30

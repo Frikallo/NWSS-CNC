@@ -120,8 +120,7 @@ if(APPLE)
     if(MACDEPLOYQT_EXECUTABLE)
         add_custom_command(TARGET nwss-cnc POST_BUILD
             COMMAND "${MACDEPLOYQT_EXECUTABLE}" "${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}.app"
-            "-always-overwrite"
-            "-executable=${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
+            # "-executable=${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
             COMMENT "Deploying Qt dependencies and fixing paths..."
         )
         

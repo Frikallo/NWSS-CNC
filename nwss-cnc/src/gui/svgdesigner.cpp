@@ -16,9 +16,12 @@
 #include <QMenu>
 #include <QColorDialog>
 #include <QFontDialog>
+#include <QGroupBox>
 
 // Define the static constant
 const double DesignerView::RASTERIZATION_THRESHOLD = 2.0;
+const double DesignerView::HANDLE_SIZE = 8.0;
+const double DesignerView::MIN_DESIGN_SIZE = 1.0;
 
 // DesignerView Implementation
 DesignerView::DesignerView(QWidget *parent)
@@ -40,7 +43,14 @@ DesignerView::DesignerView(QWidget *parent)
       m_snapMode(Grid),
       m_snapGridSize(5.0),
       m_isMeasuring(false),
-      m_isMovingSelection(false)
+      m_isMovingSelection(false),
+      m_designBoundingBox(nullptr),
+      m_widthLabel(nullptr),
+      m_heightLabel(nullptr),
+      m_isResizing(false),
+      m_activeResizeHandle(-1),
+      m_designScale(1.0),
+      m_isMovingBoundingBox(false)
 {
     // Set up the scene
     m_scene = new QGraphicsScene(this);
@@ -69,6 +79,13 @@ DesignerView::DesignerView(QWidget *parent)
     
     // Initialize the cursor
     updateCursor();
+    
+    // Create the design bounding box (initially hidden)
+    createDesignBoundingBox();
+    updateDesignBoundingBox();
+    
+    // Initially sync SVG with the design bounds
+    updateSvgItemsTransform();
 }
 
 DesignerView::~DesignerView()
@@ -82,6 +99,12 @@ void DesignerView::setSvgFile(const QString &filePath)
 {
     // Clear existing scene
     m_scene->clear();
+    
+    // Reset bounding box pointers since scene->clear() deleted them
+    m_designBoundingBox = nullptr;
+    m_widthLabel = nullptr;
+    m_heightLabel = nullptr;
+    m_resizeHandles.clear();
     
     // Delete old renderer if it exists
     if (m_renderer) {
@@ -109,8 +132,13 @@ void DesignerView::setSvgFile(const QString &filePath)
                      QGraphicsItem::ItemIsFocusable);
     m_scene->addItem(svgItem);
     
+    // Store reference to SVG items
+    m_svgItems.clear();
+    m_svgItems.append(svgItem);
+    
     // Get SVG bounds and set scene rect
     m_svgBounds = QRectF(QPointF(0, 0), m_renderer->defaultSize());
+    m_originalSvgBounds = m_svgBounds;  // Store original bounds for scaling reference
     
     // Update scene rect to include the SVG
     updateBoundaries();
@@ -125,6 +153,16 @@ void DesignerView::setSvgFile(const QString &filePath)
     
     // Reset zoom and fit the view
     resetZoom();
+    
+    // Initialize design bounds to match SVG bounds
+    m_currentDesignBounds = m_svgBounds;
+    
+    // Recreate the design bounding box
+    createDesignBoundingBox();
+    updateDesignBoundingBox();
+    
+    // Initially sync SVG with the design bounds
+    updateSvgItemsTransform();
 }
 
 void DesignerView::updateRasterizedImage()
@@ -244,6 +282,27 @@ void DesignerView::mousePressEvent(QMouseEvent *event)
     // Handle based on current tool
     switch (m_currentTool) {
         case Select:
+            // Check if we clicked on a resize handle first
+            if (m_designBoundingBox && m_designBoundingBox->isVisible()) {
+                QPointF scenePos = mapToScene(event->pos());
+                int handleIndex = getResizeHandleAt(scenePos);
+                if (handleIndex >= 0) {
+                    m_isResizing = true;
+                    m_activeResizeHandle = handleIndex;
+                    m_resizeStartPos = scenePos;
+                    setCursor(Qt::SizeFDiagCursor);
+                    break;
+                }
+                
+                // Check if we clicked on the bounding box itself for moving
+                if (m_designBoundingBox->contains(m_designBoundingBox->mapFromScene(scenePos))) {
+                    m_isMovingBoundingBox = true;
+                    m_boundingBoxMoveStartPos = scenePos;
+                    setCursor(Qt::SizeAllCursor);
+                    break;
+                }
+            }
+            
             // Let the scene handle selection
             QGraphicsView::mousePressEvent(event);
             
@@ -251,8 +310,18 @@ void DesignerView::mousePressEvent(QMouseEvent *event)
             if (event->button() == Qt::LeftButton) {
                 QList<QGraphicsItem*> items = scene()->selectedItems();
                 if (!items.isEmpty()) {
-                    m_isMovingSelection = true;
-                    m_selectionStartPos = mapToScene(event->pos());
+                    // If bounding box is visible, don't allow direct SVG manipulation
+                    if (m_designBoundingBox && m_designBoundingBox->isVisible()) {
+                        // Deselect SVG items to prevent direct manipulation
+                        for (QGraphicsItem *item : items) {
+                            if (m_svgItems.contains(item)) {
+                                item->setSelected(false);
+                            }
+                        }
+                    } else {
+                        m_isMovingSelection = true;
+                        m_selectionStartPos = mapToScene(event->pos());
+                    }
                 }
             }
             break;
@@ -315,7 +384,17 @@ void DesignerView::mouseMoveEvent(QMouseEvent *event)
     
     switch (m_currentTool) {
         case Select:
-            if (m_isMovingSelection && (event->buttons() & Qt::LeftButton)) {
+            if (m_isResizing && (event->buttons() & Qt::LeftButton)) {
+                // Handle bounding box resizing
+                performResize(scenePos);
+            } else if (m_isMovingBoundingBox && (event->buttons() & Qt::LeftButton)) {
+                // Handle bounding box movement
+                QPointF delta = scenePos - m_boundingBoxMoveStartPos;
+                m_currentDesignBounds.translate(delta);
+                updateDesignBoundingBox();
+                updateSvgItemsTransform();
+                m_boundingBoxMoveStartPos = scenePos;
+            } else if (m_isMovingSelection && (event->buttons() & Qt::LeftButton)) {
                 // Move the selected items
                 QPointF delta = scenePos - m_selectionStartPos;
                 
@@ -330,6 +409,18 @@ void DesignerView::mouseMoveEvent(QMouseEvent *event)
                 // Signal that selection changed (position)
                 emit selectionChanged();
             } else {
+                // Check for hover over resize handles
+                if (m_designBoundingBox && m_designBoundingBox->isVisible()) {
+                    int handleIndex = getResizeHandleAt(scenePos);
+                    if (handleIndex >= 0) {
+                        setCursor(Qt::SizeFDiagCursor);
+                    } else if (m_designBoundingBox->contains(m_designBoundingBox->mapFromScene(scenePos))) {
+                        setCursor(Qt::SizeAllCursor);
+                    } else {
+                        updateCursor();
+                    }
+                }
+                
                 // Let scene handle hover effects
                 QGraphicsView::mouseMoveEvent(event);
             }
@@ -380,7 +471,16 @@ void DesignerView::mouseReleaseEvent(QMouseEvent *event)
     
     switch (m_currentTool) {
         case Select:
-            if (m_isMovingSelection) {
+            if (m_isResizing) {
+                m_isResizing = false;
+                m_activeResizeHandle = -1;
+                updateCursor();
+                emit designBoundsChanged(m_currentDesignBounds, m_designScale);
+            } else if (m_isMovingBoundingBox) {
+                m_isMovingBoundingBox = false;
+                updateCursor();
+                emit designBoundsChanged(m_currentDesignBounds, m_designScale);
+            } else if (m_isMovingSelection) {
                 m_isMovingSelection = false;
                 emit selectionChanged();
             }
@@ -966,6 +1066,297 @@ void DesignerView::exportAsSvg(const QString &filePath)
     painter.end();
 }
 
+// Design bounding box methods
+void DesignerView::createDesignBoundingBox()
+{
+    // Don't create if already exists
+    if (m_designBoundingBox) return;
+    
+    // Create the main bounding box rectangle
+    m_designBoundingBox = new QGraphicsRectItem();
+    m_designBoundingBox->setPen(QPen(QColor(0, 120, 215), 2, Qt::DashLine));
+    m_designBoundingBox->setBrush(Qt::NoBrush);
+    m_designBoundingBox->setVisible(false);
+    m_scene->addItem(m_designBoundingBox);
+    
+    // Create resize handles
+    createResizeHandles();
+    
+    // Create size labels
+    m_widthLabel = new QGraphicsTextItem();
+    m_widthLabel->setDefaultTextColor(QColor(0, 120, 215));
+    m_widthLabel->setFont(QFont("Arial", 10, QFont::Bold));
+    m_widthLabel->setVisible(false);
+    m_scene->addItem(m_widthLabel);
+    
+    m_heightLabel = new QGraphicsTextItem();
+    m_heightLabel->setDefaultTextColor(QColor(0, 120, 215));
+    m_heightLabel->setFont(QFont("Arial", 10, QFont::Bold));
+    m_heightLabel->setVisible(false);
+    m_scene->addItem(m_heightLabel);
+}
+
+void DesignerView::createResizeHandles()
+{
+    // Don't create if already exist
+    if (!m_resizeHandles.isEmpty()) return;
+    
+    // Create 8 resize handles (corners and midpoints)
+    for (int i = 0; i < 8; ++i) {
+        QGraphicsRectItem *handle = new QGraphicsRectItem();
+        handle->setRect(-HANDLE_SIZE/2, -HANDLE_SIZE/2, HANDLE_SIZE, HANDLE_SIZE);
+        handle->setPen(QPen(QColor(0, 120, 215), 1));
+        handle->setBrush(QBrush(Qt::white));
+        handle->setVisible(false);
+        m_resizeHandles.append(handle);
+        m_scene->addItem(handle);
+    }
+}
+
+void DesignerView::updateDesignBoundingBox()
+{
+    if (!m_designBoundingBox) return;
+    
+    // Update the bounding box rectangle
+    m_designBoundingBox->setRect(m_currentDesignBounds);
+    
+    // Update resize handles
+    updateResizeHandles();
+    
+    // Update size labels
+    updateSizeLabels();
+}
+
+void DesignerView::updateResizeHandles()
+{
+    if (m_resizeHandles.isEmpty()) return;
+    
+    QRectF rect = m_currentDesignBounds;
+    
+    // Position handles: 0=TL, 1=T, 2=TR, 3=R, 4=BR, 5=B, 6=BL, 7=L
+    QPointF positions[8] = {
+        rect.topLeft(),                                    // 0: Top-left
+        QPointF(rect.center().x(), rect.top()),          // 1: Top
+        rect.topRight(),                                   // 2: Top-right
+        QPointF(rect.right(), rect.center().y()),         // 3: Right
+        rect.bottomRight(),                                // 4: Bottom-right
+        QPointF(rect.center().x(), rect.bottom()),        // 5: Bottom
+        rect.bottomLeft(),                                 // 6: Bottom-left
+        QPointF(rect.left(), rect.center().y())           // 7: Left
+    };
+    
+    for (int i = 0; i < 8 && i < m_resizeHandles.size(); ++i) {
+        m_resizeHandles[i]->setPos(positions[i]);
+    }
+}
+
+void DesignerView::updateSizeLabels()
+{
+    if (!m_widthLabel || !m_heightLabel) return;
+    
+    QRectF rect = m_currentDesignBounds;
+    
+    // Update width label
+    QString widthText = QString("%1 mm").arg(rect.width(), 0, 'f', 1);
+    m_widthLabel->setPlainText(widthText);
+    QPointF widthPos(rect.center().x() - m_widthLabel->boundingRect().width()/2, 
+                     rect.bottom() + 5);
+    m_widthLabel->setPos(widthPos);
+    
+    // Update height label
+    QString heightText = QString("%1 mm").arg(rect.height(), 0, 'f', 1);
+    m_heightLabel->setPlainText(heightText);
+    
+    // Rotate height label 90 degrees
+    m_heightLabel->setRotation(-90);
+    QPointF heightPos(rect.left() - 25, 
+                      rect.center().y() + m_heightLabel->boundingRect().width()/2);
+    m_heightLabel->setPos(heightPos);
+}
+
+int DesignerView::getResizeHandleAt(const QPointF &pos)
+{
+    for (int i = 0; i < m_resizeHandles.size(); ++i) {
+        QRectF handleRect = m_resizeHandles[i]->sceneBoundingRect();
+        if (handleRect.contains(pos)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void DesignerView::performResize(const QPointF &currentPos)
+{
+    if (m_activeResizeHandle < 0) return;
+    
+    QRectF newRect = m_currentDesignBounds;
+    QPointF delta = currentPos - m_resizeStartPos;
+    
+    // Apply resize based on which handle is being dragged
+    switch (m_activeResizeHandle) {
+        case 0: // Top-left
+            newRect.setTopLeft(newRect.topLeft() + delta);
+            break;
+        case 1: // Top
+            newRect.setTop(newRect.top() + delta.y());
+            break;
+        case 2: // Top-right
+            newRect.setTopRight(newRect.topRight() + delta);
+            break;
+        case 3: // Right
+            newRect.setRight(newRect.right() + delta.x());
+            break;
+        case 4: // Bottom-right
+            newRect.setBottomRight(newRect.bottomRight() + delta);
+            break;
+        case 5: // Bottom
+            newRect.setBottom(newRect.bottom() + delta.y());
+            break;
+        case 6: // Bottom-left
+            newRect.setBottomLeft(newRect.bottomLeft() + delta);
+            break;
+        case 7: // Left
+            newRect.setLeft(newRect.left() + delta.x());
+            break;
+    }
+    
+    // Enforce minimum size
+    if (newRect.width() < MIN_DESIGN_SIZE) {
+        if (m_activeResizeHandle == 0 || m_activeResizeHandle == 6 || m_activeResizeHandle == 7) {
+            newRect.setLeft(newRect.right() - MIN_DESIGN_SIZE);
+        } else {
+            newRect.setRight(newRect.left() + MIN_DESIGN_SIZE);
+        }
+    }
+    
+    if (newRect.height() < MIN_DESIGN_SIZE) {
+        if (m_activeResizeHandle == 0 || m_activeResizeHandle == 1 || m_activeResizeHandle == 2) {
+            newRect.setTop(newRect.bottom() - MIN_DESIGN_SIZE);
+        } else {
+            newRect.setBottom(newRect.top() + MIN_DESIGN_SIZE);
+        }
+    }
+    
+    // Update the design bounds
+    m_currentDesignBounds = newRect;
+    
+    // Calculate new scale based on original SVG size
+    if (!m_svgBounds.isEmpty()) {
+        double scaleX = newRect.width() / m_svgBounds.width();
+        double scaleY = newRect.height() / m_svgBounds.height();
+        m_designScale = qMax(scaleX, scaleY); // Use uniform scaling
+    }
+    
+    // Update the visual representation
+    updateDesignBoundingBox();
+    
+    // Update SVG items to match the new bounds
+    updateSvgItemsTransform();
+    
+    // Update the resize start position for next move
+    m_resizeStartPos = currentPos;
+}
+
+void DesignerView::showDesignBoundingBox(bool show)
+{
+    if (!m_designBoundingBox) return;
+    
+    m_designBoundingBox->setVisible(show);
+    
+    if (m_widthLabel) {
+        m_widthLabel->setVisible(show);
+    }
+    if (m_heightLabel) {
+        m_heightLabel->setVisible(show);
+    }
+    
+    for (QGraphicsRectItem *handle : m_resizeHandles) {
+        if (handle) {
+            handle->setVisible(show);
+        }
+    }
+    
+    // Control SVG item interactivity based on bounding box visibility
+    for (QGraphicsItem *item : m_svgItems) {
+        if (item) {
+            if (show) {
+                // Disable direct manipulation when bounding box is active
+                item->setFlags(QGraphicsItem::ItemIsSelectable);
+                item->setSelected(false);  // Deselect any selected items
+            } else {
+                // Re-enable normal interaction when bounding box is hidden
+                item->setFlags(QGraphicsItem::ItemIsSelectable | 
+                              QGraphicsItem::ItemIsMovable | 
+                              QGraphicsItem::ItemIsFocusable);
+            }
+        }
+    }
+}
+
+void DesignerView::setDesignSize(double width, double height)
+{
+    if (width < MIN_DESIGN_SIZE || height < MIN_DESIGN_SIZE) return;
+    
+    // Keep the center position the same
+    QPointF center = m_currentDesignBounds.center();
+    m_currentDesignBounds.setSize(QSizeF(width, height));
+    m_currentDesignBounds.moveCenter(center);
+    
+    // Calculate new scale
+    if (!m_svgBounds.isEmpty()) {
+        double scaleX = width / m_svgBounds.width();
+        double scaleY = height / m_svgBounds.height();
+        m_designScale = qMax(scaleX, scaleY);
+    }
+    
+    updateDesignBoundingBox();
+    
+    // Update SVG items to match the new size
+    updateSvgItemsTransform();
+    
+    emit designBoundsChanged(m_currentDesignBounds, m_designScale);
+}
+
+QList<QGraphicsItem*> DesignerView::getSvgItems() const
+{
+    return m_svgItems;
+}
+
+void DesignerView::updateSvgItemsTransform()
+{
+    if (m_svgItems.isEmpty() || m_originalSvgBounds.isEmpty()) return;
+    
+    // Calculate the scale and position needed to fit SVG into design bounds
+    double scaleX = m_currentDesignBounds.width() / m_originalSvgBounds.width();
+    double scaleY = m_currentDesignBounds.height() / m_originalSvgBounds.height();
+    
+    // Use uniform scaling to maintain aspect ratio
+    double scale = qMin(scaleX, scaleY);
+    
+    // Calculate the position to center the scaled SVG in the design bounds
+    double scaledWidth = m_originalSvgBounds.width() * scale;
+    double scaledHeight = m_originalSvgBounds.height() * scale;
+    
+    QPointF targetPos = m_currentDesignBounds.center() - QPointF(scaledWidth/2, scaledHeight/2);
+    
+    // Apply transform to all SVG items
+    for (QGraphicsItem *item : m_svgItems) {
+        if (item) {
+            // Reset transform first
+            item->setTransform(QTransform());
+            
+            // Apply scaling
+            item->setScale(scale);
+            
+            // Apply position
+            item->setPos(targetPos);
+        }
+    }
+    
+    // Update the design scale
+    m_designScale = scale;
+}
+
 // TransformCommand implementation
 TransformCommand::TransformCommand(DesignerView *view,
                                  const QList<QGraphicsItem*> &items,
@@ -1029,11 +1420,11 @@ SVGDesigner::SVGDesigner(QWidget *parent)
     // Connect the zoom changed signal
     connect(m_designerView, &DesignerView::zoomChanged, this, &SVGDesigner::onSvgViewZoomChanged);
     
-    // Connect selection changed signal
-    connect(m_designerView, &DesignerView::selectionChanged, this, &SVGDesigner::onSelectionChanged);
-    
     // Connect measure updated signal
     connect(m_designerView, &DesignerView::measureUpdated, this, &SVGDesigner::onMeasureUpdated);
+    
+    // Connect design bounds changed signal
+    connect(m_designerView, &DesignerView::designBoundsChanged, this, &SVGDesigner::onDesignBoundsChanged);
     
     // Set up the status bar
     setupStatusBar();
@@ -1041,8 +1432,6 @@ SVGDesigner::SVGDesigner(QWidget *parent)
     // Initialize undo stack
     m_undoStack = new QUndoStack(this);
     
-    // Disable the convert button initially
-    m_convertButton->setEnabled(false);
     m_fitButton->setEnabled(false);
 }
 
@@ -1126,10 +1515,6 @@ void SVGDesigner::setupDesignerToolbar()
     
     toolbar->addSeparator();
     
-    m_convertButton = new QPushButton(tr("Convert to GCode"));
-    m_convertButton->setStyleSheet("background-color: #4CAF50; color: white;");
-    toolbar->addWidget(m_convertButton);
-    
     // Add the toolbar to the layout
     static_cast<QVBoxLayout*>(layout())->addWidget(toolbar);
     
@@ -1137,8 +1522,7 @@ void SVGDesigner::setupDesignerToolbar()
     connect(m_openButton, &QPushButton::clicked, this, &SVGDesigner::onOpenSvgClicked);
     connect(m_zoomSlider, &QSlider::valueChanged, this, &SVGDesigner::onZoomChanged);
     connect(m_fitButton, &QPushButton::clicked, this, &SVGDesigner::onFitToViewClicked);
-    connect(m_convertButton, &QPushButton::clicked, this, &SVGDesigner::onConvertClicked);
-    
+
     // Connect tool buttons
     connect(m_selectToolButton, &QPushButton::clicked, this, &SVGDesigner::onSelectToolClicked);
     connect(m_measureToolButton, &QPushButton::clicked, this, &SVGDesigner::onMeasureToolClicked);
@@ -1172,6 +1556,8 @@ void SVGDesigner::setupStatusBar()
     static_cast<QVBoxLayout*>(layout())->addLayout(statusLayout);
 }
 
+
+
 void SVGDesigner::loadSvgFile(const QString &filePath)
 {
     m_designerView->setSvgFile(filePath);
@@ -1180,7 +1566,6 @@ void SVGDesigner::loadSvgFile(const QString &filePath)
         // Update UI
         QFileInfo fileInfo(filePath);
         m_fileNameLabel->setText(fileInfo.fileName());
-        m_convertButton->setEnabled(true);
         m_fitButton->setEnabled(true);
         
         // Reset zoom slider to 100%
@@ -1188,6 +1573,7 @@ void SVGDesigner::loadSvgFile(const QString &filePath)
         
         // Emit signal that SVG was loaded
         emit svgLoaded(filePath);
+        m_designerView->showDesignBoundingBox(true);
     }
 }
 
@@ -1228,8 +1614,71 @@ void SVGDesigner::onConvertClicked()
         return;
     }
     
-    // Emit signal to request conversion
-    emit convertToGCode(currentSvgFile());
+    // Get design transformation information
+    QRectF designBounds = m_designerView->getDesignBounds();
+    double designScale = m_designerView->getDesignScale();
+    
+    // Calculate offset from material origin (bottom-left)
+    QPointF designOffset = designBounds.topLeft();  // Top-left in screen coordinates
+    
+    // Check if design fits within material bounds
+    double materialWidth = m_designerView->getMaterialWidth();
+    double materialHeight = m_designerView->getMaterialHeight();
+    
+    bool fitsInMaterial = true;
+    QStringList warnings;
+    
+    // Check if design extends beyond material boundaries
+    if (designBounds.left() < 0) {
+        warnings << tr("Design extends %1 mm beyond the left edge of the material").arg(-designBounds.left(), 0, 'f', 2);
+        fitsInMaterial = false;
+    }
+    if (designBounds.top() < 0) {
+        warnings << tr("Design extends %1 mm beyond the top edge of the material").arg(-designBounds.top(), 0, 'f', 2);
+        fitsInMaterial = false;
+    }
+    if (designBounds.right() > materialWidth) {
+        warnings << tr("Design extends %1 mm beyond the right edge of the material").arg(designBounds.right() - materialWidth, 0, 'f', 2);
+        fitsInMaterial = false;
+    }
+    if (designBounds.bottom() > materialHeight) {
+        warnings << tr("Design extends %1 mm beyond the bottom edge of the material").arg(designBounds.bottom() - materialHeight, 0, 'f', 2);
+        fitsInMaterial = false;
+    }
+    
+    // Show warning dialog if design doesn't fit
+    if (!fitsInMaterial) {
+        QMessageBox warningBox(this);
+        warningBox.setIcon(QMessageBox::Warning);
+        warningBox.setWindowTitle(tr("Design Size Warning"));
+        warningBox.setText(tr("The design does not fit within the material boundaries."));
+        
+        QString detailText = tr("Material size: %1 x %2 mm\n")
+                                .arg(materialWidth, 0, 'f', 1)
+                                .arg(materialHeight, 0, 'f', 1);
+        detailText += tr("Design size: %1 x %2 mm\n")
+                         .arg(designBounds.width(), 0, 'f', 1)
+                         .arg(designBounds.height(), 0, 'f', 1);
+        detailText += tr("Design position: (%1, %2) mm\n\n")
+                         .arg(designBounds.left(), 0, 'f', 1)
+                         .arg(designBounds.top(), 0, 'f', 1);
+        detailText += tr("Issues found:\n• %1").arg(warnings.join("\n• "));
+        
+        warningBox.setDetailedText(detailText);
+        warningBox.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
+        warningBox.setDefaultButton(QMessageBox::Cancel);
+        warningBox.button(QMessageBox::Yes)->setText(tr("Continue Anyway"));
+        warningBox.button(QMessageBox::Cancel)->setText(tr("Cancel"));
+        
+        int result = warningBox.exec();
+        if (result != QMessageBox::Yes) {
+            return;  // User cancelled
+        }
+    }
+    
+    // Emit signal to request conversion with design information
+    // Note: G-code generation is now handled by the unified G-code options panel system
+    // Users should use the "Generate G-Code" button in the G-code options panel
 }
 
 void SVGDesigner::onFitToViewClicked()
@@ -1252,46 +1701,10 @@ void SVGDesigner::onFitToViewClicked()
     updateZoomLabel(qRound(zoomPercent));
 }
 
-void SVGDesigner::onSelectionChanged()
+void SVGDesigner::onDesignBoundsChanged(QRectF bounds, double scale)
 {
-    // Update properties panel fields
-    updateTransformFields();
-    
-    // Emit signal for other components to react
-    emit selectionChanged();
-}
-
-void SVGDesigner::updateTransformFields()
-{
-    QRectF selectionBounds = m_designerView->getSelectionBounds();
-    
-    if (selectionBounds.isValid()) {
-        // Block signals during updates
-        m_posXSpinBox->blockSignals(true);
-        m_posYSpinBox->blockSignals(true);
-        
-        // Update position fields
-        m_posXSpinBox->setValue(selectionBounds.x());
-        m_posYSpinBox->setValue(selectionBounds.y());
-        
-        // Enable fields
-        m_posXSpinBox->setEnabled(true);
-        m_posYSpinBox->setEnabled(true);
-        m_scaleXSpinBox->setEnabled(true);
-        m_scaleYSpinBox->setEnabled(true);
-        m_rotationSpinBox->setEnabled(true);
-        
-        // Unblock signals
-        m_posXSpinBox->blockSignals(false);
-        m_posYSpinBox->blockSignals(false);
-    } else {
-        // No selection, disable fields
-        m_posXSpinBox->setEnabled(false);
-        m_posYSpinBox->setEnabled(false);
-        m_scaleXSpinBox->setEnabled(false);
-        m_scaleYSpinBox->setEnabled(false);
-        m_rotationSpinBox->setEnabled(false);
-    }
+    // This information can be used by the G-Code generator
+    // The bounds and scale provide the final dimensions and scaling factor
 }
 
 void SVGDesigner::onMeasureUpdated(double distance, double angle)
@@ -1359,55 +1772,7 @@ void SVGDesigner::onSnapModeChanged(int index)
     m_designerView->setSnapMode(snapMode);
 }
 
-void SVGDesigner::onApplyTransformClicked()
-{
-    // Apply the transformation settings to the selected items
-    double newX = m_posXSpinBox->value();
-    double newY = m_posYSpinBox->value();
-    double scaleX = m_scaleXSpinBox->value();
-    double scaleY = m_scaleYSpinBox->value();
-    double rotation = m_rotationSpinBox->value();
-    
-    // Get the current selection bounds
-    QRectF currentBounds = m_designerView->getSelectionBounds();
-    
-    if (!currentBounds.isValid()) {
-        return;
-    }
-    
-    // Calculate position delta
-    double deltaX = newX - currentBounds.x();
-    double deltaY = newY - currentBounds.y();
-    
-    // Apply transformations
-    if (deltaX != 0 || deltaY != 0) {
-        m_designerView->moveSelectedBy(deltaX, deltaY);
-    }
-    
-    if (scaleX != 1.0 || scaleY != 1.0) {
-        m_designerView->scaleSelected(scaleX, scaleY);
-        
-        // Reset scale spinners after applying
-        m_scaleXSpinBox->blockSignals(true);
-        m_scaleYSpinBox->blockSignals(true);
-        m_scaleXSpinBox->setValue(1.0);
-        m_scaleYSpinBox->setValue(1.0);
-        m_scaleXSpinBox->blockSignals(false);
-        m_scaleYSpinBox->blockSignals(false);
-    }
-    
-    if (rotation != 0) {
-        m_designerView->rotateSelected(rotation);
-        
-        // Reset rotation spinner after applying
-        m_rotationSpinBox->blockSignals(true);
-        m_rotationSpinBox->setValue(0);
-        m_rotationSpinBox->blockSignals(false);
-    }
-    
-    // Update fields with new values
-    updateTransformFields();
-}
+
 
 void SVGDesigner::setMaterialSize(double width, double height)
 {
@@ -1423,4 +1788,29 @@ void SVGDesigner::updateMaterialFromSettings()
 {
     // This method would be connected to the GCodeOptionsPanel to update material settings
     // Implementation depends on how the GCodeOptionsPanel is structured
+}
+
+QRectF SVGDesigner::getDesignBounds() const
+{
+    if (m_designerView) {
+        return m_designerView->getDesignBounds();
+    }
+    return QRectF();
+}
+
+double SVGDesigner::getDesignScale() const
+{
+    if (m_designerView) {
+        return m_designerView->getDesignScale();
+    }
+    return 1.0;
+}
+
+QPointF SVGDesigner::getDesignOffset() const
+{
+    if (m_designerView) {
+        QRectF bounds = m_designerView->getDesignBounds();
+        return bounds.topLeft();
+    }
+    return QPointF();
 }
