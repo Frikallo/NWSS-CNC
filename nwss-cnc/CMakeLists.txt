@@ -143,6 +143,14 @@ elseif(WIN32)
         set(PLATFORM_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/app.rc")
     endif()
     
+    # Force release runtime libraries even in debug builds
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    
+    # Ensure we're not mixing debug/release runtimes
+    if(CMAKE_BUILD_TYPE STREQUAL "Release" OR NOT CMAKE_BUILD_TYPE)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+    endif()
+    
     add_executable(nwss-cnc WIN32 
         ${GUI_SOURCES} 
         ${GUI_HEADERS}
@@ -150,20 +158,32 @@ elseif(WIN32)
         ${PLATFORM_SOURCES}
     )
     
-    # Windows deployment
+    # Windows deployment - ensure we include the correct runtime libraries
     set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
     set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ".")
+    set(CMAKE_INSTALL_DEBUG_LIBRARIES FALSE)  # Don't install debug libraries
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)  # We'll handle this manually
     include(InstallRequiredSystemLibraries)
     
+    # Install release runtime libraries only
     install(TARGETS nwss-cnc RUNTIME DESTINATION ".")
+    
+    # Add Visual C++ Redistributable to the package
+    if(EXISTS "${CMAKE_BINARY_DIR}/redist/vc_redist.x64.exe")
+        install(FILES "${CMAKE_BINARY_DIR}/redist/vc_redist.x64.exe" DESTINATION "redist/")
+    endif()
     
     find_program(WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS "${Qt6Core_DIR}/../../../bin")
     if(WINDEPLOYQT_EXECUTABLE)
-        # Run windeployqt after build
+        # Run windeployqt after build with release libraries only
         add_custom_command(TARGET nwss-cnc POST_BUILD
             COMMAND "${WINDEPLOYQT_EXECUTABLE}" "$<TARGET_FILE:nwss-cnc>"
-            "--no-translations"
-            COMMENT "Deploying Qt dependencies..."
+            "--release"
+            "--no-translations" 
+            "--no-system-d3d-compiler"
+            "--no-opengl-sw"
+            "--no-debug-info"
+            COMMENT "Deploying Qt dependencies (Release mode)..."
         )
     else()
         message(WARNING "windeployqt not found! Skipping Qt dependency deployment.")

@@ -26,17 +26,25 @@ jobs:
         target: 'desktop'
         modules: 'qtserialport'
         cache: true
+        setup-python: false
         
     - name: Set up MSVC
       uses: microsoft/setup-msbuild@v1.1
       
     - name: Configure CMake
       run: |
-        cmake -B build -S nwss-cnc -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+        cmake -B build -S nwss-cnc -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
         
     - name: Build
       run: |
-        cmake --build build --config Release --target nwss-cnc
+        cmake --build build --config Release --target nwss-cnc --parallel
+        
+    - name: Install Visual C++ Redistributable
+      run: |
+        # Download and install Visual C++ Redistributable 2015-2022
+        Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "vc_redist.x64.exe"
+        mkdir -p build/redist
+        Copy-Item "vc_redist.x64.exe" "build/redist/"
         
     - name: Sign application (if certificates are available)
       continue-on-error: true

@@ -32,17 +32,42 @@ bool GCodeGenerator::generateGCode(const std::vector<Path>& paths, const std::st
     
     // Validate paths if enabled
     if (m_options.validateFeatureSizes) {
+        std::cout << "DEBUG: Feature size validation ENABLED" << std::endl;
         std::vector<std::string> warnings;
         if (!validatePaths(paths, warnings)) {
+            std::cout << "DEBUG: Feature validation found issues:" << std::endl;
             std::cerr << "Warning: Some features may be too small for the selected tool:" << std::endl;
             for (const auto& warning : warnings) {
                 std::cerr << "  " << warning << std::endl;
             }
+        } else {
+            std::cout << "DEBUG: All features validated successfully" << std::endl;
         }
+    } else {
+        std::cout << "DEBUG: Feature size validation DISABLED" << std::endl;
     }
     
     // Apply tool offsets if enabled
+    std::cout << "DEBUG: GCode generation - Tool offsets " << (m_options.enableToolOffsets ? "ENABLED" : "DISABLED") << std::endl;
+    if (m_options.enableToolOffsets) {
+        std::cout << "DEBUG: ========================================" << std::endl;
+        std::cout << "DEBUG: NEW HIGH-PRECISION OFFSET ALGORITHM" << std::endl;
+        std::cout << "DEBUG: ========================================" << std::endl;
+        std::cout << "DEBUG: Features:" << std::endl;
+        std::cout << "  - Sub-millimeter precision for detailed cuts" << std::endl;
+        std::cout << "  - Robust curve handling (not just line segments)" << std::endl;
+        std::cout << "  - Topology preservation for shape integrity" << std::endl;
+        std::cout << "  - Adaptive strategies based on feature size" << std::endl;
+        std::cout << "  - Extensive quality validation" << std::endl;
+        std::cout << "DEBUG: ========================================" << std::endl;
+    }
     std::vector<Path> processedPaths = m_options.enableToolOffsets ? applyToolOffsets(paths) : paths;
+    
+    if (m_options.enableToolOffsets) {
+        std::cout << "DEBUG: Tool offsets applied - processed " << processedPaths.size() << " paths" << std::endl;
+    } else {
+        std::cout << "DEBUG: Using original paths without offsets - " << paths.size() << " paths" << std::endl;
+    }
     
     // Set precision for output
     file << std::fixed << std::setprecision(4);
@@ -69,7 +94,14 @@ bool GCodeGenerator::generateGCode(const std::vector<Path>& paths, const std::st
 
 std::string GCodeGenerator::generateGCodeString(const std::vector<Path>& paths) const {
     // Apply tool offsets if enabled
+    std::cout << "DEBUG: GCode string generation - Tool offsets " << (m_options.enableToolOffsets ? "ENABLED" : "DISABLED") << std::endl;
     std::vector<Path> processedPaths = m_options.enableToolOffsets ? applyToolOffsets(paths) : paths;
+    
+    if (m_options.enableToolOffsets) {
+        std::cout << "DEBUG: Tool offsets applied for string generation - processed " << processedPaths.size() << " paths" << std::endl;
+    } else {
+        std::cout << "DEBUG: Using original paths for string generation - " << paths.size() << " paths" << std::endl;
+    }
     
     std::stringstream ss;
     ss << std::fixed << std::setprecision(4);
@@ -371,33 +403,104 @@ bool GCodeGenerator::validatePaths(const std::vector<Path>& paths, std::vector<s
 }
 
 std::vector<Path> GCodeGenerator::applyToolOffsets(const std::vector<Path>& paths) const {
+    std::cout << "DEBUG: GCodeGenerator::applyToolOffsets() called with " << paths.size() << " paths" << std::endl;
+    
     std::vector<Path> offsetPaths;
     offsetPaths.reserve(paths.size());
     
     // Get the selected tool
     const Tool* tool = m_toolRegistry.getTool(m_options.selectedToolId);
     if (!tool || tool->diameter <= 0) {
+        std::cout << "DEBUG: No valid tool selected or invalid tool diameter" << std::endl;
+        if (!tool) {
+            std::cout << "  - Tool ID: " << m_options.selectedToolId << " not found in registry" << std::endl;
+        } else {
+            std::cout << "  - Tool diameter: " << tool->diameter << " (invalid)" << std::endl;
+        }
+        std::cout << "DEBUG: Returning original paths without offset" << std::endl;
         // No valid tool selected, return original paths
         return paths;
     }
     
+    std::cout << "DEBUG: Using tool for offset calculation:" << std::endl;
+    std::cout << "  - Tool ID: " << m_options.selectedToolId << std::endl;
+    std::cout << "  - Tool diameter: " << tool->diameter << std::endl;
+    std::cout << "  - Tool name: " << tool->name << std::endl;
+    std::cout << "  - Offset direction: " << static_cast<int>(m_options.offsetDirection) << std::endl;
+    
     // Apply offset to each path
-    for (const auto& path : paths) {
+    for (size_t pathIndex = 0; pathIndex < paths.size(); ++pathIndex) {
+        const auto& path = paths[pathIndex];
+        
+        std::cout << "DEBUG: Processing path " << pathIndex << " of " << paths.size() << std::endl;
+        
         if (path.empty()) {
+            std::cout << "  - Path is empty, keeping original" << std::endl;
             offsetPaths.push_back(path);
             continue;
         }
         
-        // Calculate offset path
-        Path offsetPath = ToolOffset::calculateOffset(path, tool->diameter, m_options.offsetDirection);
+        const auto& originalPoints = path.getPoints();
+        std::cout << "  - Original path has " << originalPoints.size() << " points" << std::endl;
+        
+        // Print first few points of original path for reference
+        std::cout << "  - First few original points:" << std::endl;
+        for (size_t i = 0; i < std::min<size_t>(3, originalPoints.size()); ++i) {
+            std::cout << "    [" << i << "] (" << originalPoints[i].x << ", " << originalPoints[i].y << ")" << std::endl;
+        }
+        
+        // Calculate offset path using high-precision algorithm
+        std::cout << "  - Calling ToolOffset::calculateHighPrecisionOffset for path " << pathIndex << std::endl;
+        Path offsetPath = ToolOffset::calculateHighPrecisionOffset(path, tool->diameter, m_options.offsetDirection, 0.001);
         
         // If offset failed, use original path
         if (offsetPath.empty()) {
+            std::cout << "  - Offset calculation failed for path " << pathIndex << ", using original path" << std::endl;
             offsetPaths.push_back(path);
         } else {
+            const auto& offsetPoints = offsetPath.getPoints();
+            std::cout << "  - Offset calculation successful for path " << pathIndex << std::endl;
+            std::cout << "    - Offset path has " << offsetPoints.size() << " points" << std::endl;
+            
+            // Print first few points of offset path for comparison
+            std::cout << "    - First few offset points:" << std::endl;
+            for (size_t i = 0; i < std::min<size_t>(3, offsetPoints.size()); ++i) {
+                std::cout << "      [" << i << "] (" << offsetPoints[i].x << ", " << offsetPoints[i].y << ")" << std::endl;
+            }
+            
+                         // Calculate and display offset distance for verification
+             if (!originalPoints.empty() && !offsetPoints.empty()) {
+                 double dx = offsetPoints[0].x - originalPoints[0].x;
+                 double dy = offsetPoints[0].y - originalPoints[0].y;
+                 double actualOffset = std::sqrt(dx * dx + dy * dy);
+                 double expectedOffset = tool->diameter / 2.0;
+                 std::cout << "    - Actual offset distance: " << actualOffset << std::endl;
+                 std::cout << "    - Expected offset distance: " << expectedOffset << std::endl;
+                 
+                 // Safety check: if offset is way off, use original path instead
+                 double accuracyRatio = actualOffset / expectedOffset;
+                 if (accuracyRatio > 5.0 || accuracyRatio < 0.2) {
+                     std::cout << "    - Offset accuracy: FAILED (ratio: " << accuracyRatio << ") - USING ORIGINAL PATH" << std::endl;
+                     offsetPaths.pop_back(); // Remove the bad offset path
+                     offsetPaths.push_back(path); // Use original path instead
+                 } else if (std::abs(actualOffset - expectedOffset) < 0.01) {
+                     std::cout << "    - Offset accuracy: EXCELLENT" << std::endl;
+                 } else if (std::abs(actualOffset - expectedOffset) < 0.05) {
+                     std::cout << "    - Offset accuracy: GOOD" << std::endl;
+                 } else {
+                     std::cout << "    - Offset accuracy: WARNING" << std::endl;
+                 }
+             }
+            
             offsetPaths.push_back(offsetPath);
         }
+        
+        std::cout << "  - Path " << pathIndex << " processing complete" << std::endl;
     }
+    
+    std::cout << "DEBUG: GCodeGenerator::applyToolOffsets() completed" << std::endl;
+    std::cout << "  - Input paths: " << paths.size() << std::endl;
+    std::cout << "  - Output paths: " << offsetPaths.size() << std::endl;
     
     return offsetPaths;
 }

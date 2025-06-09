@@ -4,17 +4,198 @@
 #include "core/geometry.h"
 #include "core/tool.h"
 #include <vector>
+#include <memory>
 
 namespace nwss {
 namespace cnc {
 
 /**
- * Tool offset calculator for compensating tool paths
+ * Curve segment types for high-precision offsetting
+ */
+enum class CurveType {
+    LINE,
+    CIRCULAR_ARC,
+    BEZIER_CUBIC,
+    BEZIER_QUADRATIC
+};
+
+/**
+ * High-precision curve segment for detailed offsetting
+ */
+struct CurveSegment {
+    CurveType type;
+    std::vector<Point2D> controlPoints;
+    double startParameter = 0.0;
+    double endParameter = 1.0;
+    
+    // Evaluate point on curve at parameter t [0,1]
+    Point2D evaluateAt(double t) const;
+    
+    // Get tangent vector at parameter t [0,1]
+    Point2D getTangentAt(double t) const;
+    
+    // Get normal vector at parameter t [0,1] 
+    Point2D getNormalAt(double t) const;
+    
+    // Get curvature at parameter t [0,1]
+    double getCurvatureAt(double t) const;
+    
+    // Convert to polyline with given tolerance
+    std::vector<Point2D> toPolyline(double tolerance) const;
+    
+    // Get bounding box
+    void getBounds(double& minX, double& minY, double& maxX, double& maxY) const;
+};
+
+/**
+ * High-precision path representation
+ */
+class PrecisionPath {
+public:
+    PrecisionPath() = default;
+    explicit PrecisionPath(const Path& simplePath, double tolerance = 0.001);
+    
+    void addSegment(const CurveSegment& segment);
+    void addLine(const Point2D& start, const Point2D& end);
+    void addArc(const Point2D& center, double radius, double startAngle, double endAngle);
+    
+    const std::vector<CurveSegment>& getSegments() const { return m_segments; }
+    bool isClosed() const;
+    bool isEmpty() const { return m_segments.empty(); }
+    
+    // Convert back to simple path
+    Path toSimplePath(double tolerance = 0.001) const;
+    
+    // Get total length
+    double getLength() const;
+    
+    // Get bounding box
+    void getBounds(double& minX, double& minY, double& maxX, double& maxY) const;
+    
+private:
+    std::vector<CurveSegment> m_segments;
+    double m_tolerance;
+};
+
+/**
+ * Advanced tool offset calculator for high-precision work
+ */
+class PrecisionToolOffset {
+public:
+    struct OffsetOptions {
+        double tolerance;           // Geometric tolerance
+        double minSegmentLength;     // Minimum segment length
+        double maxSegmentLength;      // Maximum segment length
+        int maxIterations;            // Maximum iterations for convergence
+        bool preserveSharpCorners;   // Preserve sharp corners
+        bool adaptiveRefinement;     // Use adaptive refinement
+        double cornerThreshold;       // Threshold for corner detection (radians)
+        double maxCurvatureError;   // Maximum curvature approximation error
+        
+        // Constructor with default values
+        OffsetOptions() 
+            : tolerance(0.001)
+            , minSegmentLength(0.01)
+            , maxSegmentLength(1.0)
+            , maxIterations(100)
+            , preserveSharpCorners(true)
+            , adaptiveRefinement(true)
+            , cornerThreshold(0.1)
+            , maxCurvatureError(0.001)
+        {}
+    };
+    
+    /**
+     * High-precision offset calculation
+     * @param originalPath The original path to offset
+     * @param toolDiameter The diameter of the cutting tool
+     * @param offsetDirection Direction to offset the path
+     * @param options Advanced offsetting options
+     * @return Precision offset path
+     */
+    static PrecisionPath calculatePrecisionOffset(const PrecisionPath& originalPath,
+                                                 double toolDiameter,
+                                                 ToolOffsetDirection offsetDirection,
+                                                 const OffsetOptions& options = OffsetOptions{});
+    
+    /**
+     * Adaptive offset that chooses strategy based on feature analysis
+     * @param originalPath The original path to offset
+     * @param toolDiameter The diameter of the cutting tool
+     * @param offsetDirection Direction to offset the path
+     * @param options Advanced offsetting options
+     * @return Precision offset path with optimal strategy
+     */
+    static PrecisionPath calculateAdaptiveOffset(const PrecisionPath& originalPath,
+                                                double toolDiameter,
+                                                ToolOffsetDirection offsetDirection,
+                                                const OffsetOptions& options = OffsetOptions{});
+    
+    /**
+     * Validate offset quality and accuracy
+     * @param originalPath Original path
+     * @param offsetPath Offset path
+     * @param expectedOffset Expected offset distance
+     * @param options Validation options
+     * @return Quality metrics and validation results
+     */
+    struct ValidationResult {
+        bool isValid = false;
+        double averageError = 0.0;
+        double maxError = 0.0;
+        double minError = 0.0;
+        std::vector<std::string> warnings;
+        std::vector<std::string> errors;
+    };
+    
+    static ValidationResult validateOffset(const PrecisionPath& originalPath,
+                                         const PrecisionPath& offsetPath,
+                                         double expectedOffset,
+                                         const OffsetOptions& options = OffsetOptions{});
+
+private:
+    // Core offset algorithms
+    static PrecisionPath offsetSingleCurve(const CurveSegment& curve,
+                                          double offset,
+                                          const OffsetOptions& options);
+    
+    static std::vector<CurveSegment> offsetAndConnect(const std::vector<CurveSegment>& segments,
+                                                     double offset,
+                                                     bool isClosed,
+                                                     const OffsetOptions& options);
+    
+    // Intersection and connection algorithms
+    static bool findCurveIntersection(const CurveSegment& curve1,
+                                    const CurveSegment& curve2,
+                                    std::vector<Point2D>& intersections,
+                                    const OffsetOptions& options);
+    
+    static CurveSegment createFilletConnection(const CurveSegment& seg1,
+                                             const CurveSegment& seg2,
+                                             double offset,
+                                             const OffsetOptions& options);
+    
+    // Feature analysis
+    static double analyzeMinimumFeatureSize(const PrecisionPath& path);
+    static double analyzeMaximumCurvature(const PrecisionPath& path);
+    static std::vector<Point2D> findSharpCorners(const PrecisionPath& path, double threshold);
+    
+    // Quality control
+    static bool isOffsetReasonable(const PrecisionPath& original,
+                                 const PrecisionPath& offset,
+                                 double expectedOffset);
+    
+    static PrecisionPath refinePath(const PrecisionPath& path, const OffsetOptions& options);
+    static PrecisionPath smoothPath(const PrecisionPath& path, const OffsetOptions& options);
+};
+
+/**
+ * Legacy tool offset calculator (maintained for compatibility)
  */
 class ToolOffset {
 public:
     /**
-     * Calculate offset path for tool compensation
+     * Calculate offset path for tool compensation (LEGACY - use PrecisionToolOffset for new work)
      * @param originalPath The original path to offset
      * @param toolDiameter The diameter of the cutting tool
      * @param offsetDirection Direction to offset the path
@@ -27,141 +208,61 @@ public:
                                double tolerance = 0.01);
     
     /**
-     * Calculate multiple offset paths for different offset amounts
+     * High-precision wrapper that uses the new algorithm
      * @param originalPath The original path to offset
-     * @param offsets Vector of offset amounts (positive = outside, negative = inside)
+     * @param toolDiameter The diameter of the cutting tool
+     * @param offsetDirection Direction to offset the path
      * @param tolerance Tolerance for offset calculations
-     * @return Vector of offset paths
+     * @return High-precision offset path converted to simple path
      */
+    static Path calculateHighPrecisionOffset(const Path& originalPath,
+                                           double toolDiameter,
+                                           ToolOffsetDirection offsetDirection,
+                                           double tolerance = 0.001);
+    
+    // Legacy compatibility methods (existing interface preserved)
     static std::vector<Path> calculateMultipleOffsets(const Path& originalPath,
                                                      const std::vector<double>& offsets,
                                                      double tolerance = 0.01);
     
-    /**
-     * Determine automatic offset direction based on path characteristics
-     * @param path The path to analyze
-     * @return Recommended offset direction
-     */
     static ToolOffsetDirection determineOffsetDirection(const Path& path);
-    
-    /**
-     * Check if a feature is too small for the given tool
-     * @param path The path representing the feature
-     * @param toolDiameter The tool diameter
-     * @return True if the feature is too small to machine with this tool
-     */
     static bool isFeatureTooSmall(const Path& path, double toolDiameter);
-    
-    /**
-     * Calculate minimum feature size in a path
-     * @param path The path to analyze
-     * @return Minimum feature size (diameter of smallest circle that fits)
-     */
     static double calculateMinimumFeatureSize(const Path& path);
-    
-    /**
-     * Validate if tool can machine all features in paths
-     * @param paths Vector of paths to check
-     * @param toolDiameter Tool diameter
-     * @param warnings Output vector for warning messages
-     * @return True if all features can be machined
-     */
     static bool validateToolForPaths(const std::vector<Path>& paths,
                                    double toolDiameter,
                                    std::vector<std::string>& warnings);
 
 private:
-    /**
-     * Offset a single line segment
-     * @param start Start point of the line
-     * @param end End point of the line
-     * @param offset Offset amount (positive = left side, negative = right side)
-     * @return Pair of offset start and end points
-     */
+    // Legacy implementation methods (existing code)
     static std::pair<Point2D, Point2D> offsetLineSegment(const Point2D& start,
                                                         const Point2D& end,
                                                         double offset);
     
-    /**
-     * Calculate offset for a polyline path
-     * @param points Vector of path points
-     * @param offset Offset amount
-     * @param isClosed Whether the path is closed
-     * @param tolerance Tolerance for calculations
-     * @return Vector of offset points
-     */
     static std::vector<Point2D> offsetPolyline(const std::vector<Point2D>& points,
                                               double offset,
                                               bool isClosed,
                                               double tolerance);
     
-    /**
-     * Find intersection point of two lines
-     * @param p1 First point of first line
-     * @param p2 Second point of first line
-     * @param p3 First point of second line
-     * @param p4 Second point of second line
-     * @param intersection Output intersection point
-     * @return True if intersection found
-     */
     static bool findLineIntersection(const Point2D& p1, const Point2D& p2,
                                    const Point2D& p3, const Point2D& p4,
                                    Point2D& intersection);
     
-    /**
-     * Calculate perpendicular offset point
-     * @param point The original point
-     * @param direction Direction vector (normalized)
-     * @param offset Offset distance
-     * @return Offset point
-     */
     static Point2D calculatePerpendicularOffset(const Point2D& point,
                                               const Point2D& direction,
                                               double offset);
     
-    /**
-     * Determine if a path is clockwise oriented
-     * @param points Path points
-     * @return True if clockwise
-     */
     static bool isClockwise(const std::vector<Point2D>& points);
     
-    /**
-     * Remove self-intersections from offset path
-     * @param points Input points that may have self-intersections
-     * @param tolerance Tolerance for intersection detection
-     * @return Cleaned path without self-intersections
-     */
     static std::vector<Point2D> removeSelfIntersections(const std::vector<Point2D>& points,
                                                        double tolerance);
     
-         /**
-      * Simplify path by removing redundant points
-      * @param points Input points
-      * @param tolerance Tolerance for simplification
-      * @return Simplified path
-      */
-     static std::vector<Point2D> simplifyPath(const std::vector<Point2D>& points,
+    static std::vector<Point2D> simplifyPath(const std::vector<Point2D>& points,
                                             double tolerance);
     
-     /**
-      * Calculate minimum distance between two line segments
-      * @param p1 First point of first segment
-      * @param p2 Second point of first segment
-      * @param p3 First point of second segment
-      * @param p4 Second point of second segment
-      * @return Minimum distance between segments
-      */
-     static double calculateSegmentDistance(const Point2D& p1, const Point2D& p2,
+    static double calculateSegmentDistance(const Point2D& p1, const Point2D& p2,
                                           const Point2D& p3, const Point2D& p4);
      
-     /**
-      * Check if a path forms a closed loop
-      * @param points Path points
-      * @param tolerance Tolerance for determining if first and last points are close
-      * @return True if path is closed
-      */
-     static bool isPathClosed(const std::vector<Point2D>& points, double tolerance = 0.01);
+    static bool isPathClosed(const std::vector<Point2D>& points, double tolerance = 0.01);
 };
 
 } // namespace cnc
