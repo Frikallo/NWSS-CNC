@@ -34,29 +34,8 @@ jobs:
     - name: Build
       run: |
         cmake --build build --config Release --target nwss-cnc
- 
-    - name: Create DMG
-      run: |
-        # Install create-dmg if not available
-        if ! command -v create-dmg &> /dev/null; then
-          brew install create-dmg
-        fi
-        
-        # Create DMG
-        create-dmg \
-          --volname "NWSS-CNC" \
-          --volicon "nwss-cnc/resources/icons/nwss-cnc-icon.icns" \
-          --window-pos 200 120 \
-          --window-size 600 400 \
-          --icon-size 100 \
-          --icon "NWSS-CNC.app" 150 200 \
-          --hide-extension "NWSS-CNC.app" \
-          --app-drop-link 450 200 \
-          "NWSS-CNC-${{ github.ref_name || 'latest' }}.dmg" \
-          "build/NWSS-CNC.app"
           
-    - name: Package with CPack (fallback)
-      if: failure()
+    - name: Package with CPack
       run: |
         cmake --build build --config Release --target package_for_github
         
