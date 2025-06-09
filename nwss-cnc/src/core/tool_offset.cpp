@@ -1,3 +1,4 @@
+#define _USE_MATH_DEFINES
 #include "core/tool_offset.h"
 #include <cmath>
 #include <algorithm>
