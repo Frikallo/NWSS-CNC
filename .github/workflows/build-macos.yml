@@ -46,15 +46,4 @@ jobs:
         path: |
           *.dmg
           build/*.dmg
-          build/NWSS-CNC.app
         retention-days: 30
-        
-    - name: Upload to release
-      if: github.event_name == 'release'
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          *.dmg
-          build/*.dmg
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
