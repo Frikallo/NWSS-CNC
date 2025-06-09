@@ -33,11 +33,11 @@ jobs:
       
     - name: Configure CMake
       run: |
-        cmake -B build -S nwss-cnc -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
+        cmake -B build -S nwss-cnc -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Releases
         
     - name: Build
       run: |
-        cmake --build build --config Release --target nwss-cnc --parallel
+        cmake --build build --config Release --target nwss-cnc
         
     - name: Install Visual C++ Redistributable
       run: |
@@ -45,53 +45,7 @@ jobs:
         Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "vc_redist.x64.exe"
         mkdir -p build/redist
         Copy-Item "vc_redist.x64.exe" "build/redist/"
-        
-    - name: Sign application (if certificates are available)
-      continue-on-error: true
-      shell: powershell
-      run: |
-        if ($env:WINDOWS_CERTIFICATE_P12) {
-          Write-Host "Setting up code signing..."
-          
-          # Decode and save certificate
-          $certBytes = [System.Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_P12)
-          $certPath = "certificate.p12"
-          [System.IO.File]::WriteAllBytes($certPath, $certBytes)
-          
-          # Import certificate to store
-          $securePassword = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
-          Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword
-          
-          # Find the executable
-          $exePath = Get-ChildItem -Path "build" -Recurse -Name "nwss-cnc.exe" | Select-Object -First 1
-          if ($exePath) {
-            $fullExePath = Join-Path "build" $exePath
-            Write-Host "Found executable: $fullExePath"
-            
-            # Sign the executable
-            & signtool sign /fd SHA256 /tr http://timestamp.sectigo.com /td SHA256 /a "$fullExePath"
-            
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "✅ Application signed successfully"
-              
-              # Verify signature
-              & signtool verify /pa "$fullExePath"
-            } else {
-              Write-Host "❌ Code signing failed with exit code $LASTEXITCODE"
-            }
-          } else {
-            Write-Host "❌ Could not find nwss-cnc.exe to sign"
-          }
-          
-          # Clean up
-          Remove-Item $certPath -ErrorAction SilentlyContinue
-        } else {
-          Write-Host "⚠️ No signing certificates configured, skipping code signing"
-        }
-      env:
-        WINDOWS_CERTIFICATE_P12: ${{ secrets.WINDOWS_CERTIFICATE_P12 }}
-        WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        
+
     - name: Package
       run: |
         cmake --build build --config Release --target package_for_github

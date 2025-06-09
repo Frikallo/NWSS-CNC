@@ -143,14 +143,6 @@ elseif(WIN32)
         set(PLATFORM_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/app.rc")
     endif()
     
-    # Force release runtime libraries even in debug builds
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-    
-    # Ensure we're not mixing debug/release runtimes
-    if(CMAKE_BUILD_TYPE STREQUAL "Release" OR NOT CMAKE_BUILD_TYPE)
-        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-    endif()
-    
     add_executable(nwss-cnc WIN32 
         ${GUI_SOURCES} 
         ${GUI_HEADERS}
@@ -179,10 +171,7 @@ elseif(WIN32)
         add_custom_command(TARGET nwss-cnc POST_BUILD
             COMMAND "${WINDEPLOYQT_EXECUTABLE}" "$<TARGET_FILE:nwss-cnc>"
             "--release"
-            "--no-translations" 
-            "--no-system-d3d-compiler"
-            "--no-opengl-sw"
-            "--no-debug-info"
+            "--no-translations"
             COMMENT "Deploying Qt dependencies (Release mode)..."
         )
     else()
@@ -204,14 +193,6 @@ elseif(WIN32)
     set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/nwss-cnc-icon.ico")
     set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/nwss-cnc-icon.ico")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
-    
-    # NSIS Desktop Shortcut Configuration
-    set(CPACK_NSIS_CREATE_ICONS_EXTRA
-        "CreateShortCut '$DESKTOP\\\\${APP_NAME}.lnk' '$INSTDIR\\\\nwss-cnc.exe' '' '$INSTDIR\\\\nwss-cnc.exe' 0"
-    )
-    set(CPACK_NSIS_DELETE_ICONS_EXTRA
-        "Delete '$DESKTOP\\\\${APP_NAME}.lnk'"
-    )
     
     # Alternative method using MENU_LINKS (creates Start Menu + Desktop shortcuts)
     # set(CPACK_NSIS_MENU_LINKS
