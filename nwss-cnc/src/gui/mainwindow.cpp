@@ -438,6 +438,7 @@ void MainWindow::newFile()
     if (maybeSave()) {
         gCodeEditor->clear();
         setCurrentFile("");
+        updateTimeEstimateLabel(0); // Reset time estimate
         tabWidget->setCurrentIndex(0); // Switch to editor tab
     }
 }
@@ -521,6 +522,9 @@ void MainWindow::loadFile(const QString &fileName)
     QTimer::singleShot(100, this, [this]() {
         updateGCodePreview();
     });
+
+    // Reset time estimate when loading a file (since we can't calculate it from GCode text)
+    updateTimeEstimateLabel(0);
 
     setCurrentFile(fileName);
     statusBar()->showMessage(tr("File loaded"), 2000);
@@ -902,8 +906,10 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
         // Calculate time estimate
         nwss::cnc::GCodeGenerator::TimeEstimate estimate = generator.calculateTimeEstimate(paths);
         
-        statusBar()->showMessage(tr("G-Code generated successfully. Estimated time: %1 minutes")
-                               .arg(estimate.totalTime / 60.0, 0, 'f', 1), 5000);
+        // Update the time estimate label
+        updateTimeEstimateLabel(estimate.totalTime);
+        
+        statusBar()->showMessage("Generated successfully.");
 
     } catch (const std::exception& e) {
         QMessageBox::critical(this, tr("Conversion Error"), 
@@ -912,6 +918,8 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
     
     // Update the viewers with the new G-code
     updateGCodePreview();
+    // Change view to 3D preview
+    tabWidget->setCurrentIndex(1);
 }
 
 // Note: The overloaded convertSvgToGCode method has been removed.
@@ -943,6 +951,9 @@ void MainWindow::onGCodeChanged()
 {
     // Called when the G-Code editor content changes
     documentWasModified();
+    
+    // Reset time estimate when GCode is manually edited (since we can't recalculate from GCode text)
+    updateTimeEstimateLabel(0);
     
     // Update the 3D preview if it's currently visible
     if (tabWidget->currentIndex() == 1) { // 3D Preview tab
@@ -1011,4 +1022,30 @@ void MainWindow::onToolRegistryChanged()
 {
     // The tool registry has been modified, refresh the tool selector
     toolSelector->refreshTools();
+}
+
+void MainWindow::updateTimeEstimateLabel(double totalTimeSeconds)
+{
+    if (totalTimeSeconds <= 0) {
+        timeEstimateLabel->setText(tr("Est. time: --:--:--"));
+        return;
+    }
+
+    int hours = static_cast<int>(totalTimeSeconds / 3600);
+    int minutes = static_cast<int>((totalTimeSeconds - hours * 3600) / 60);
+    int seconds = static_cast<int>(totalTimeSeconds) % 60;
+
+    QString timeString;
+    if (hours > 0) {
+        timeString = QString("%1:%2:%3")
+                        .arg(hours, 2, 10, QChar('0'))
+                        .arg(minutes, 2, 10, QChar('0'))
+                        .arg(seconds, 2, 10, QChar('0'));
+    } else {
+        timeString = QString("%1:%2")
+                        .arg(minutes, 2, 10, QChar('0'))
+                        .arg(seconds, 2, 10, QChar('0'));
+    }
+
+    timeEstimateLabel->setText(tr("Est. time: %1").arg(timeString));
 }

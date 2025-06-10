@@ -152,7 +152,7 @@ private:
     void updateRasterizedImage();
     void drawSvgDirectly(QPainter *painter);
     void drawRasterizedImage(QPainter *painter);
-    void drawRulers(QPainter *painter, const QRectF &rect);
+
     void drawGrid(QPainter *painter, const QRectF &rect);
     void drawMaterialBoundary(QPainter *painter);
     void drawBedBoundary(QPainter *painter);
@@ -194,9 +194,7 @@ private:
     bool m_gridVisible;
     double m_gridSpacing;
     
-    // Rulers
-    bool m_rulersVisible;
-    int m_rulerWidth;
+
     
     // Tools and interaction
     Tool m_currentTool;

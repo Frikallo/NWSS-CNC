@@ -54,6 +54,20 @@ GCodeOptionsPanel::GCodeOptionsPanel(QWidget *parent)
     connect(materialThicknessSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &GCodeOptionsPanel::onMaterialChanged);
     connect(cutDepthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &GCodeOptionsPanel::recalculatePassCount);
     
+    // Connect material and bed size changes to emit optionsChanged signal
+    connect(materialWidthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]() {
+        emit optionsChanged();
+    });
+    connect(materialHeightSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]() {
+        emit optionsChanged();
+    });
+    connect(bedWidthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]() {
+        emit optionsChanged();
+    });
+    connect(bedHeightSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this]() {
+        emit optionsChanged();
+    });
+    
     // Load settings from the last session
     QTimer::singleShot(100, this, &GCodeOptionsPanel::loadSettings);
 }

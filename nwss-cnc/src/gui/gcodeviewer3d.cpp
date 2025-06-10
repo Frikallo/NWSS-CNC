@@ -840,7 +840,7 @@ void GCodeViewer3D::setIsometricView()
     
     // Create a proper isometric view direction 
     // Standard isometric: camera positioned to look down at 30° from horizontal
-    QVector3D isoDirection(1.0f, 1.0f, 1.0f);  // Classic isometric direction
+    QVector3D isoDirection(1.0f, -1.0f, 1.0f);  // Classic isometric direction
     isoDirection.normalize();
     
     // Set target to rotation center and position camera at distance

@@ -37,8 +37,6 @@ DesignerView::DesignerView(QWidget *parent)
       m_bedHeight(300.0),
       m_gridVisible(true),
       m_gridSpacing(10.0),
-      m_rulersVisible(true),
-      m_rulerWidth(25),
       m_currentTool(Select),
       m_snapMode(Grid),
       m_snapGridSize(5.0),
@@ -68,7 +66,7 @@ DesignerView::DesignerView(QWidget *parent)
     setFrameShape(QFrame::NoFrame);
     setBackgroundBrush(QBrush(QColor(240, 240, 240)));
     
-    // Set the alignment to top-left for better ruler positioning
+    // Set the alignment to top-left
     setAlignment(Qt::AlignLeft | Qt::AlignTop);
     
     // Set scene rect to include material and bed boundaries
@@ -609,11 +607,6 @@ void DesignerView::drawForeground(QPainter *painter, const QRectF &rect)
     // Call base implementation
     QGraphicsView::drawForeground(painter, rect);
     
-    // Draw rulers
-    if (m_rulersVisible) {
-        drawRulers(painter, rect);
-    }
-    
     // Draw measurement line
     if (m_isMeasuring) {
         drawMeasureLine(painter);
@@ -660,125 +653,7 @@ void DesignerView::drawGrid(QPainter *painter, const QRectF &rect)
     }
 }
 
-void DesignerView::drawRulers(QPainter *painter, const QRectF &rect)
-{
-    // Save current painter state
-    painter->save();
-    
-    // Get viewport rect and transform to scene coordinates
-    QRect viewRect = viewport()->rect();
-    QPointF topLeft = mapToScene(viewRect.topLeft());
-    
-    // Set up ruler background and font
-    QBrush rulerBrush(QColor(240, 240, 240));
-    QPen rulerPen(QColor(100, 100, 100));
-    QPen tickPen(QColor(80, 80, 80));
-    QFont rulerFont = painter->font();
-    rulerFont.setPointSize(8);
-    painter->setFont(rulerFont);
-    
-    // Horizontal ruler (top)
-    QRectF hRulerRect(rect.left(), rect.top(), rect.width(), m_rulerWidth);
-    painter->fillRect(hRulerRect, rulerBrush);
-    painter->setPen(rulerPen);
-    painter->drawLine(hRulerRect.bottomLeft(), hRulerRect.bottomRight());
-    
-    // Vertical ruler (left)
-    QRectF vRulerRect(rect.left(), rect.top() + m_rulerWidth, m_rulerWidth, rect.height() - m_rulerWidth);
-    painter->fillRect(vRulerRect, rulerBrush);
-    painter->setPen(rulerPen);
-    painter->drawLine(vRulerRect.topRight(), vRulerRect.bottomRight());
-    
-    // Draw corner square
-    QRectF cornerRect(rect.left(), rect.top(), m_rulerWidth, m_rulerWidth);
-    painter->fillRect(cornerRect, rulerBrush);
-    painter->setPen(rulerPen);
-    painter->drawRect(cornerRect);
-    
-    // Determine tick spacing based on zoom
-    double minorTickSpacing = 5.0;  // in scene units
-    double majorTickSpacing = 50.0; // in scene units
-    
-    if (m_zoomFactor > 2.0) {
-        minorTickSpacing = 1.0;
-        majorTickSpacing = 10.0;
-    } else if (m_zoomFactor > 0.5) {
-        minorTickSpacing = 5.0;
-        majorTickSpacing = 25.0;
-    } else if (m_zoomFactor < 0.2) {
-        minorTickSpacing = 10.0;
-        majorTickSpacing = 100.0;
-    }
-    
-    // Draw horizontal ruler ticks
-    painter->setPen(tickPen);
-    double startX = floor(rect.left() / minorTickSpacing) * minorTickSpacing;
-    double endX = ceil(rect.right() / minorTickSpacing) * minorTickSpacing;
-    
-    for (double x = startX; x <= endX; x += minorTickSpacing) {
-        bool isMajorTick = fabs(fmod(x, majorTickSpacing)) < 0.1;
-        double tickHeight = isMajorTick ? 10.0 : 5.0;
-        
-        QPointF tickTop(x, rect.top() + m_rulerWidth - tickHeight);
-        QPointF tickBottom(x, rect.top() + m_rulerWidth);
-        painter->drawLine(tickTop, tickBottom);
-        
-        if (isMajorTick) {
-            QString label = QString::number(int(x));
-            QRectF textRect(x - 15, rect.top() + 2, 30, m_rulerWidth - 4);
-            painter->drawText(textRect, Qt::AlignCenter, label);
-        }
-    }
-    
-    // Draw vertical ruler ticks
-    double startY = floor(rect.top() / minorTickSpacing) * minorTickSpacing;
-    double endY = ceil(rect.bottom() / minorTickSpacing) * minorTickSpacing;
-    
-    for (double y = startY + m_rulerWidth; y <= endY; y += minorTickSpacing) {
-        bool isMajorTick = fabs(fmod(y - m_rulerWidth, majorTickSpacing)) < 0.1;
-        double tickWidth = isMajorTick ? 10.0 : 5.0;
-        
-        QPointF tickLeft(rect.left() + m_rulerWidth - tickWidth, y);
-        QPointF tickRight(rect.left() + m_rulerWidth, y);
-        painter->drawLine(tickLeft, tickRight);
-        
-        if (isMajorTick) {
-            QString label = QString::number(int(y - m_rulerWidth));
-            QRectF textRect(rect.left() + 2, y - 15, m_rulerWidth - 4, 30);
-            painter->save();
-            painter->translate(rect.left() + m_rulerWidth / 2, y);
-            painter->rotate(-90);
-            painter->drawText(QRectF(-15, -m_rulerWidth/2, 30, m_rulerWidth), Qt::AlignCenter, label);
-            painter->restore();
-        }
-    }
-    
-    // Draw current mouse position indicator
-    QPoint mousePos = viewport()->mapFromGlobal(QCursor::pos());
-    if (viewport()->rect().contains(mousePos)) {
-        QPointF scenePos = mapToScene(mousePos);
-        
-        // Highlight current position on rulers
-        painter->setPen(Qt::red);
-        
-        // Horizontal indicator
-        painter->drawLine(QPointF(scenePos.x(), rect.top()), 
-                         QPointF(scenePos.x(), rect.top() + m_rulerWidth));
-        
-        // Vertical indicator
-        painter->drawLine(QPointF(rect.left(), scenePos.y()), 
-                         QPointF(rect.left() + m_rulerWidth, scenePos.y()));
-        
-        // Draw position text in corner
-        QString posText = QString("X:%1 Y:%2")
-                           .arg(int(scenePos.x()))
-                           .arg(int(scenePos.y()));
-        painter->drawText(cornerRect, Qt::AlignCenter, posText);
-    }
-    
-    // Restore painter state
-    painter->restore();
-}
+
 
 void DesignerView::drawMaterialBoundary(QPainter *painter)
 {
@@ -1432,6 +1307,7 @@ SVGDesigner::SVGDesigner(QWidget *parent)
     // Initialize undo stack
     m_undoStack = new QUndoStack(this);
     
+    m_zoomSlider->setEnabled(false);
     m_fitButton->setEnabled(false);
 }
 
@@ -1566,6 +1442,7 @@ void SVGDesigner::loadSvgFile(const QString &filePath)
         // Update UI
         QFileInfo fileInfo(filePath);
         m_fileNameLabel->setText(fileInfo.fileName());
+        m_zoomSlider->setEnabled(true);
         m_fitButton->setEnabled(true);
         
         // Reset zoom slider to 100%

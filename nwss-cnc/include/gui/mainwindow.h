@@ -50,6 +50,7 @@ private slots:
     void showToolManager();
     void onToolSelected(int toolId);
     void onToolRegistryChanged();
+    void updateTimeEstimateLabel(double totalTimeSeconds);
 
 private:
     // Design transformation is now handled directly in convertSvgToGCode
