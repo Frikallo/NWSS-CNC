@@ -55,25 +55,11 @@ int main(int argc, char *argv[])
     // Set consistent font size across all platforms
     defaultFont.setPointSize(13);
     app.setFont(defaultFont);
-    
-    // Create a more modern palette
+
     QPalette palette;
-    palette.setColor(QPalette::Window, QColor(53, 53, 53));
-    palette.setColor(QPalette::WindowText, Qt::white);
-    palette.setColor(QPalette::Base, QColor(35, 35, 35));
-    palette.setColor(QPalette::AlternateBase, QColor(53, 53, 53));
-    palette.setColor(QPalette::ToolTipBase, Qt::white);
-    palette.setColor(QPalette::ToolTipText, Qt::white);
-    palette.setColor(QPalette::Text, Qt::white);
-    palette.setColor(QPalette::Button, QColor(53, 53, 53));
-    palette.setColor(QPalette::ButtonText, Qt::white);
-    palette.setColor(QPalette::BrightText, Qt::red);
-    palette.setColor(QPalette::Link, QColor(42, 130, 218));
-    palette.setColor(QPalette::Highlight, QColor(42, 130, 218));
-    palette.setColor(QPalette::HighlightedText, Qt::black);
-    
-    // Uncomment to use the dark theme
-    // app.setPalette(palette);
+    QColor softBlue(0, 118, 210, 255);
+    palette.setColor(QPalette::Highlight, softBlue);
+    app.setPalette(palette);
     
     // Set application icon
     app.setWindowIcon(QIcon(":/icons/nwss-cnc-icon.png"));
