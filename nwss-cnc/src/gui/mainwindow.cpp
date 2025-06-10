@@ -849,7 +849,7 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
         gCodeOptions.optimizePaths = gcodeOptionsPanel->getOptimizePaths();
         gCodeOptions.linearizePaths = gcodeOptionsPanel->getLinearizePaths();
         gCodeOptions.linearizeTolerance = 0.01;
-        gCodeOptions.includeComments = true;
+        gCodeOptions.includeComments = false;
         gCodeOptions.includeHeader = true;
         gCodeOptions.returnToOrigin = true;
         
@@ -888,20 +888,6 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
         // Step 9: Display the generated G-code
         gCodeEditor->setPlainText(gCode);
         setCurrentFile("");
-        
-        // Add transformation info as comment at the top
-        QString transformComment = QString("( Design transformation applied )\n");
-        transformComment += QString("( Design size: %1 x %2 mm )\n")
-                               .arg(transformInfo.newWidth, 0, 'f', 2)
-                               .arg(transformInfo.newHeight, 0, 'f', 2);
-        transformComment += QString("( Design position: %1, %2 mm )\n")
-                               .arg(transformInfo.newMinX, 0, 'f', 2)
-                               .arg(transformInfo.newMinY, 0, 'f', 2);
-        transformComment += QString("( Design scale: %1 )\n").arg(transformInfo.scaleX, 0, 'f', 4);
-        transformComment += "\n";
-        
-        QString fullGCode = transformComment + gCode;
-        gCodeEditor->setPlainText(fullGCode);
 
         // Calculate time estimate
         nwss::cnc::GCodeGenerator::TimeEstimate estimate = generator.calculateTimeEstimate(paths);
