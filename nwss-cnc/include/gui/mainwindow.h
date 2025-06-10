@@ -110,8 +110,6 @@ private:
     QAction *aboutAct;
     QAction *aboutQtAct;
     QAction *showMachinePanelAct;
-    QAction *showGCodeOptionsPanelAct;
-    QAction *showToolPanelAct;
     QAction *manageToolsAct;
     QLabel *timeEstimateLabel;
 };

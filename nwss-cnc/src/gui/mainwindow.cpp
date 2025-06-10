@@ -257,13 +257,7 @@ void MainWindow::createActions()
     pasteAct->setStatusTip(tr("Paste the clipboard's contents into the current selection"));
     connect(pasteAct, &QAction::triggered, gCodeEditor, &GCodeEditor::paste);
     
-    showGCodeOptionsPanelAct = new QAction(tr("Show G-Code Options Panel"), this);
-    showGCodeOptionsPanelAct->setCheckable(true);
-    showGCodeOptionsPanelAct->setChecked(true);
-    
-    showToolPanelAct = new QAction(tr("Show Tool Panel"), this);
-    showToolPanelAct->setCheckable(true);
-    showToolPanelAct->setChecked(true);
+    // Dock panels are now always visible - removed toggle actions
     
     // Tools menu actions
     manageToolsAct = new QAction(tr("&Manage Tools..."), this);
@@ -298,8 +292,7 @@ void MainWindow::createMenus()
     editMenu->addAction(pasteAct);
 
     viewMenu = menuBar()->addMenu(tr("&View"));
-    viewMenu->addAction(showGCodeOptionsPanelAct);
-    viewMenu->addAction(showToolPanelAct);
+    // Dock panels are now always visible - removed toggle actions
     
     toolsMenu = menuBar()->addMenu(tr("&Tools"));
     toolsMenu->addAction(manageToolsAct);
@@ -358,12 +351,9 @@ void MainWindow::createDockPanels()
     toolDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
     addDockWidget(Qt::LeftDockWidgetArea, toolDock);
     
-    // Connect the show/hide actions
-    connect(showGCodeOptionsPanelAct, &QAction::toggled, gcodeOptionsDock, &QDockWidget::setVisible);
-    connect(gcodeOptionsDock, &QDockWidget::visibilityChanged, showGCodeOptionsPanelAct, &QAction::setChecked);
-    
-    connect(showToolPanelAct, &QAction::toggled, toolDock, &QDockWidget::setVisible);
-    connect(toolDock, &QDockWidget::visibilityChanged, showToolPanelAct, &QAction::setChecked);
+    // Dock panels are always visible - no toggle connections needed
+    gcodeOptionsDock->setVisible(true);
+    toolDock->setVisible(true);
 }
 
 void MainWindow::createStatusBar()
@@ -386,12 +376,9 @@ void MainWindow::readSettings()
     move(pos);
     resize(size);
     
-    // Restore dock widget states
-    bool gcodeOptionsPanelVisible = settings.value("gcodeOptionsPanelVisible", true).toBool();
-    bool toolPanelVisible = settings.value("toolPanelVisible", true).toBool();
-    
-    gcodeOptionsDock->setVisible(gcodeOptionsPanelVisible);
-    toolDock->setVisible(toolPanelVisible);
+    // Dock panels are always visible - no need to restore visibility state
+    gcodeOptionsDock->setVisible(true);
+    toolDock->setVisible(true);
     
     // Restore tab index
     int tabIndex = settings.value("activeTabIndex", 0).toInt();
@@ -404,9 +391,7 @@ void MainWindow::writeSettings()
     settings.setValue("pos", pos());
     settings.setValue("size", size());
     
-    // Save dock widget states
-    settings.setValue("gcodeOptionsPanelVisible", gcodeOptionsDock->isVisible());
-    settings.setValue("toolPanelVisible", toolDock->isVisible());
+    // Dock panels are always visible - no need to save visibility state
     
     // Save active tab
     settings.setValue("activeTabIndex", tabWidget->currentIndex());
