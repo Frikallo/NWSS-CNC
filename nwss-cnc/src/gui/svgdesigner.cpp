@@ -64,7 +64,7 @@ DesignerView::DesignerView(QWidget *parent)
     
     // Visual style
     setFrameShape(QFrame::NoFrame);
-    setBackgroundBrush(QBrush(QColor(240, 240, 240)));
+    setBackgroundBrush(QBrush(QColor(26, 26, 26)));
     
     // Set the alignment to top-left
     setAlignment(Qt::AlignLeft | Qt::AlignTop);
@@ -615,8 +615,8 @@ void DesignerView::drawForeground(QPainter *painter, const QRectF &rect)
 
 void DesignerView::drawGrid(QPainter *painter, const QRectF &rect)
 {
-    // Set up the painter with a semi-transparent light gray color
-    QPen gridPen(QColor(180, 180, 180, 120), 0.5);
+    // Set up the painter with a semi-transparent gray color
+    QPen gridPen(QColor(80, 80, 80, 100), 0.5);
     painter->setPen(gridPen);
     
     // Calculate grid lines based on spacing and view rect
@@ -635,8 +635,8 @@ void DesignerView::drawGrid(QPainter *painter, const QRectF &rect)
         painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
     }
     
-    // Draw major grid lines (every 5 minor lines) with darker color
-    gridPen.setColor(QColor(120, 120, 120, 150));
+    // Draw major grid lines (every 5 minor lines) with darker gray color
+    gridPen.setColor(QColor(120, 120, 120, 140));
     gridPen.setWidth(1);
     painter->setPen(gridPen);
     
@@ -660,9 +660,9 @@ void DesignerView::drawMaterialBoundary(QPainter *painter)
     // Draw the material boundary
     painter->save();
     
-    // Material is shown as a light blue rectangle
-    QBrush materialBrush(QColor(200, 230, 255, 30));
-    QPen materialPen(QColor(0, 100, 200), 1.5);
+    // Material is shown as a dark orange rectangle
+    QBrush materialBrush(QColor(255, 140, 0, 40));
+    QPen materialPen(QColor(255, 140, 0), 2.0);
     materialPen.setStyle(Qt::SolidLine);
     
     painter->setPen(materialPen);
@@ -672,7 +672,7 @@ void DesignerView::drawMaterialBoundary(QPainter *painter)
     painter->drawRect(materialRect);
     
     // Label the material
-    painter->setPen(QColor(0, 100, 200));
+    painter->setPen(QColor(255, 180, 80));
     QFont font = painter->font();
     font.setBold(true);
     painter->setFont(font);
@@ -690,9 +690,9 @@ void DesignerView::drawBedBoundary(QPainter *painter)
     // Draw the bed boundary
     painter->save();
     
-    // Bed is shown as a light gray rectangle
-    QBrush bedBrush(QColor(220, 220, 220, 20));
-    QPen bedPen(QColor(100, 100, 100), 1.0);
+    // Bed is shown as a dark gray rectangle
+    QBrush bedBrush(QColor(60, 60, 60, 30));
+    QPen bedPen(QColor(140, 140, 140), 1.0);
     bedPen.setStyle(Qt::DashLine);
     
     painter->setPen(bedPen);
@@ -702,7 +702,7 @@ void DesignerView::drawBedBoundary(QPainter *painter)
     painter->drawRect(bedRect);
     
     // Label the bed
-    painter->setPen(QColor(80, 80, 80));
+    painter->setPen(QColor(180, 180, 180));
     QString label = tr("Bed (%1 × %2)")
                     .arg(m_bedWidth)
                     .arg(m_bedHeight);
@@ -723,12 +723,12 @@ void DesignerView::drawMeasureLine(QPainter *painter)
     double angle = line.angle();
     
     // Draw the line
-    QPen measurePen(QColor(255, 50, 50), 1.5);
+    QPen measurePen(QColor(255, 165, 0), 2.0);
     painter->setPen(measurePen);
     painter->drawLine(line);
     
     // Draw endpoints
-    painter->setBrush(QColor(255, 50, 50));
+    painter->setBrush(QColor(255, 165, 0));
     painter->drawEllipse(m_measureStart, 3, 3);
     painter->drawEllipse(m_measureEnd, 3, 3);
     
@@ -743,12 +743,12 @@ void DesignerView::drawMeasureLine(QPainter *painter)
     textRect.adjust(-5, -3, 5, 3);
     
     // Draw text background
-    painter->setBrush(QColor(255, 255, 255, 200));
+    painter->setBrush(QColor(40, 40, 40, 220));
     painter->setPen(Qt::NoPen);
     painter->drawRoundedRect(textRect, 3, 3);
     
     // Draw text
-    painter->setPen(QColor(200, 0, 0));
+    painter->setPen(QColor(255, 180, 80));
     painter->drawText(textRect, Qt::AlignCenter, distText);
     
     painter->restore();
@@ -949,7 +949,7 @@ void DesignerView::createDesignBoundingBox()
     
     // Create the main bounding box rectangle
     m_designBoundingBox = new QGraphicsRectItem();
-    m_designBoundingBox->setPen(QPen(QColor(0, 120, 215), 2, Qt::DashLine));
+    m_designBoundingBox->setPen(QPen(QColor(255, 140, 0), 2, Qt::DashLine));
     m_designBoundingBox->setBrush(Qt::NoBrush);
     m_designBoundingBox->setVisible(false);
     m_scene->addItem(m_designBoundingBox);
@@ -959,13 +959,13 @@ void DesignerView::createDesignBoundingBox()
     
     // Create size labels
     m_widthLabel = new QGraphicsTextItem();
-    m_widthLabel->setDefaultTextColor(QColor(0, 120, 215));
+    m_widthLabel->setDefaultTextColor(QColor(255, 180, 80));
     m_widthLabel->setFont(QFont("Arial", 10, QFont::Bold));
     m_widthLabel->setVisible(false);
     m_scene->addItem(m_widthLabel);
     
     m_heightLabel = new QGraphicsTextItem();
-    m_heightLabel->setDefaultTextColor(QColor(0, 120, 215));
+    m_heightLabel->setDefaultTextColor(QColor(255, 180, 80));
     m_heightLabel->setFont(QFont("Arial", 10, QFont::Bold));
     m_heightLabel->setVisible(false);
     m_scene->addItem(m_heightLabel);
@@ -980,8 +980,8 @@ void DesignerView::createResizeHandles()
     for (int i = 0; i < 8; ++i) {
         QGraphicsRectItem *handle = new QGraphicsRectItem();
         handle->setRect(-HANDLE_SIZE/2, -HANDLE_SIZE/2, HANDLE_SIZE, HANDLE_SIZE);
-        handle->setPen(QPen(QColor(0, 120, 215), 1));
-        handle->setBrush(QBrush(Qt::white));
+        handle->setPen(QPen(QColor(255, 140, 0), 2));
+        handle->setBrush(QBrush(QColor(40, 40, 40)));
         handle->setVisible(false);
         m_resizeHandles.append(handle);
         m_scene->addItem(handle);

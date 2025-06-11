@@ -6,3 +6,4 @@
 *.nc
 *.gcode
 .DS_Store
+3d-tests/opencamlib/
