@@ -20,7 +20,7 @@
 
 // Define the static constant
 const double DesignerView::RASTERIZATION_THRESHOLD = 2.0;
-const double DesignerView::HANDLE_SIZE = 8.0;
+const double DesignerView::HANDLE_SIZE = 5.0;
 const double DesignerView::MIN_DESIGN_SIZE = 1.0;
 
 // DesignerView Implementation
@@ -246,6 +246,11 @@ void DesignerView::wheelEvent(QWheelEvent *event)
         updateRasterizedImage();
     }
     
+    // Update UI element sizes based on new zoom
+    if (m_designBoundingBox && m_designBoundingBox->isVisible()) {
+        updateUIElementsForZoom();
+    }
+    
     event->accept();
 }
 
@@ -276,6 +281,14 @@ void DesignerView::mousePressEvent(QMouseEvent *event)
     
     // Store the mouse position
     m_lastMousePos = event->pos();
+    
+    // Check for intuitive panning first (middle mouse or spacebar+left click)
+    if ((event->button() == Qt::MiddleButton) || 
+        (event->button() == Qt::LeftButton && event->modifiers() & Qt::ShiftModifier)) {
+        m_isPanning = true;
+        setCursor(Qt::ClosedHandCursor);
+        return;
+    }
     
     // Handle based on current tool
     switch (m_currentTool) {
@@ -380,6 +393,15 @@ void DesignerView::mouseMoveEvent(QMouseEvent *event)
     
     QPointF scenePos = mapToScene(event->pos());
     
+    // Handle intuitive panning first (middle mouse or shift+left click)
+    if (m_isPanning && (event->buttons() & (Qt::MiddleButton | Qt::LeftButton))) {
+        QPoint delta = event->pos() - m_lastMousePos;
+        horizontalScrollBar()->setValue(horizontalScrollBar()->value() - delta.x());
+        verticalScrollBar()->setValue(verticalScrollBar()->value() - delta.y());
+        m_lastMousePos = event->pos();
+        return;
+    }
+    
     switch (m_currentTool) {
         case Select:
             if (m_isResizing && (event->buttons() & Qt::LeftButton)) {
@@ -415,8 +437,12 @@ void DesignerView::mouseMoveEvent(QMouseEvent *event)
                     } else if (m_designBoundingBox->contains(m_designBoundingBox->mapFromScene(scenePos))) {
                         setCursor(Qt::SizeAllCursor);
                     } else {
-                        updateCursor();
+                        // Show hand cursor over empty space to indicate panning is available
+                        setCursor(Qt::OpenHandCursor);
                     }
+                } else {
+                    // Show hand cursor over empty space to indicate panning is available
+                    setCursor(Qt::OpenHandCursor);
                 }
                 
                 // Let scene handle hover effects
@@ -464,6 +490,14 @@ void DesignerView::mouseReleaseEvent(QMouseEvent *event)
 {
     if (!m_renderer) {
         QGraphicsView::mouseReleaseEvent(event);
+        return;
+    }
+    
+    // Handle intuitive panning release first
+    if (m_isPanning && (event->button() == Qt::MiddleButton || 
+                       (event->button() == Qt::LeftButton && event->modifiers() & Qt::ShiftModifier))) {
+        m_isPanning = false;
+        updateCursor(); // Reset to appropriate cursor
         return;
     }
     
@@ -536,6 +570,11 @@ void DesignerView::setZoom(int zoomLevel)
     
     if (needsRasterUpdate) {
         updateRasterizedImage();
+    }
+    
+    // Update UI element sizes based on new zoom
+    if (m_designBoundingBox && m_designBoundingBox->isVisible()) {
+        updateUIElementsForZoom();
     }
     
     // Emit signal about zoom change
@@ -653,8 +692,6 @@ void DesignerView::drawGrid(QPainter *painter, const QRectF &rect)
     }
 }
 
-
-
 void DesignerView::drawMaterialBoundary(QPainter *painter)
 {
     // Draw the material boundary
@@ -662,7 +699,7 @@ void DesignerView::drawMaterialBoundary(QPainter *painter)
     
     // Material is shown as a dark orange rectangle
     QBrush materialBrush(QColor(255, 140, 0, 40));
-    QPen materialPen(QColor(255, 140, 0), 2.0);
+    QPen materialPen(QColor(255, 140, 0), getZoomAdjustedSize(2.0));
     materialPen.setStyle(Qt::SolidLine);
     
     painter->setPen(materialPen);
@@ -671,16 +708,39 @@ void DesignerView::drawMaterialBoundary(QPainter *painter)
     QRectF materialRect(0, 0, m_materialWidth, m_materialHeight);
     painter->drawRect(materialRect);
     
-    // Label the material
+    // Label the material with size-appropriate font
     painter->setPen(QColor(255, 180, 80));
     QFont font = painter->font();
     font.setBold(true);
-    painter->setFont(font);
-    QString label = tr("Material (%1 × %2)")
-                    .arg(m_materialWidth)
-                    .arg(m_materialHeight);
     
-    painter->drawText(materialRect.adjusted(5, 5, -5, -5), Qt::AlignTop | Qt::AlignLeft, label);
+    // Scale font size based on material size and zoom level
+    double minDimension = qMin(m_materialWidth, m_materialHeight);
+    double baseFontSize = qMin(minDimension * 0.1, 12.0); // 10% of smallest dimension, max 12pt
+    double fontSize = getZoomAdjustedSize(baseFontSize);
+    font.setPointSize(qRound(fontSize));
+    painter->setFont(font);
+    
+    QString label = tr("Material (%1 × %2)")
+                    .arg(m_materialWidth, 0, 'f', 1)
+                    .arg(m_materialHeight, 0, 'f', 1);
+    
+    // Use the helper function to get non-overlapping position
+    QFont bedFont = painter->font();
+    bedFont.setBold(false);
+    double bedMinDimension = qMin(m_bedWidth, m_bedHeight);
+    double bedBaseFontSize = qMin(bedMinDimension * 0.08, 10.0);
+    double bedFontSize = getZoomAdjustedSize(bedBaseFontSize);
+    bedFont.setPointSize(qRound(bedFontSize));
+    
+    QString bedLabel = tr("Bed (%1 × %2)")
+                       .arg(m_bedWidth, 0, 'f', 1)
+                       .arg(m_bedHeight, 0, 'f', 1);
+    
+    QPair<QRectF, QRectF> labelPositions = calculateLabelPositions(label, bedLabel, font, bedFont);
+    QRectF materialLabelRect = labelPositions.first;
+    
+    // Draw the material label at the calculated position
+    painter->drawText(materialLabelRect, Qt::AlignTop | Qt::AlignLeft, label);
     
     painter->restore();
 }
@@ -692,7 +752,7 @@ void DesignerView::drawBedBoundary(QPainter *painter)
     
     // Bed is shown as a dark gray rectangle
     QBrush bedBrush(QColor(60, 60, 60, 30));
-    QPen bedPen(QColor(140, 140, 140), 1.0);
+    QPen bedPen(QColor(140, 140, 140), getZoomAdjustedSize(1.0));
     bedPen.setStyle(Qt::DashLine);
     
     painter->setPen(bedPen);
@@ -701,13 +761,38 @@ void DesignerView::drawBedBoundary(QPainter *painter)
     QRectF bedRect(0, 0, m_bedWidth, m_bedHeight);
     painter->drawRect(bedRect);
     
-    // Label the bed
+    // Label the bed with size-appropriate font
     painter->setPen(QColor(180, 180, 180));
-    QString label = tr("Bed (%1 × %2)")
-                    .arg(m_bedWidth)
-                    .arg(m_bedHeight);
+    QFont font = painter->font();
     
-    painter->drawText(bedRect.adjusted(5, 25, -5, -5), Qt::AlignTop | Qt::AlignLeft, label);
+    // Scale font size based on bed size and zoom level
+    double minDimension = qMin(m_bedWidth, m_bedHeight);
+    double baseFontSize = qMin(minDimension * 0.08, 10.0); // 8% of smallest dimension, max 10pt
+    double fontSize = getZoomAdjustedSize(baseFontSize);
+    font.setPointSize(qRound(fontSize));
+    painter->setFont(font);
+    
+    QString label = tr("Bed (%1 × %2)")
+                    .arg(m_bedWidth, 0, 'f', 1)
+                    .arg(m_bedHeight, 0, 'f', 1);
+    
+    // Use the helper function to get non-overlapping position
+    QFont materialFont = painter->font();
+    materialFont.setBold(true);
+    double materialMinDimension = qMin(m_materialWidth, m_materialHeight);
+    double materialBaseFontSize = qMin(materialMinDimension * 0.1, 12.0);
+    double materialFontSize = getZoomAdjustedSize(materialBaseFontSize);
+    materialFont.setPointSize(qRound(materialFontSize));
+    
+    QString materialLabel = tr("Material (%1 × %2)")
+                            .arg(m_materialWidth, 0, 'f', 1)
+                            .arg(m_materialHeight, 0, 'f', 1);
+    
+    QPair<QRectF, QRectF> labelPositions = calculateLabelPositions(materialLabel, label, materialFont, font);
+    QRectF bedLabelRect = labelPositions.second;
+    
+    // Draw the bed label at the calculated position
+    painter->drawText(bedLabelRect, Qt::AlignTop | Qt::AlignLeft, label);
     
     painter->restore();
 }
@@ -722,30 +807,32 @@ void DesignerView::drawMeasureLine(QPainter *painter)
     double distance = line.length();
     double angle = line.angle();
     
-    // Draw the line
-    QPen measurePen(QColor(255, 165, 0), 2.0);
+    // Draw the line with zoom-adjusted width - make it thinner
+    QPen measurePen(QColor(255, 165, 0), getZoomAdjustedSize(2.0));
     painter->setPen(measurePen);
     painter->drawLine(line);
     
-    // Draw endpoints
+    // Draw endpoints with zoom-adjusted size - make them smaller
+    double endpointSize = getZoomAdjustedSize(2.0);
     painter->setBrush(QColor(255, 165, 0));
-    painter->drawEllipse(m_measureStart, 3, 3);
-    painter->drawEllipse(m_measureEnd, 3, 3);
+    painter->drawEllipse(m_measureStart, endpointSize, endpointSize);
+    painter->drawEllipse(m_measureEnd, endpointSize, endpointSize);
     
     // Draw distance label
     QPointF midPoint = (m_measureStart + m_measureEnd) / 2;
     QString distText = QString("%1").arg(distance, 0, 'f', 1);
     
-    // Create a background for the text
+    // Create a background for the text with zoom-adjusted padding
     QFontMetricsF fm(painter->font());
     QRectF textRect = fm.boundingRect(distText);
     textRect.moveTo(midPoint);
-    textRect.adjust(-5, -3, 5, 3);
+    double padding = getZoomAdjustedSize(3.0);
+    textRect.adjust(-padding, -getZoomAdjustedSize(2.0), padding, getZoomAdjustedSize(2.0));
     
     // Draw text background
     painter->setBrush(QColor(40, 40, 40, 220));
     painter->setPen(Qt::NoPen);
-    painter->drawRoundedRect(textRect, 3, 3);
+    painter->drawRoundedRect(textRect, getZoomAdjustedSize(2.0), getZoomAdjustedSize(2.0));
     
     // Draw text
     painter->setPen(QColor(255, 180, 80));
@@ -947,9 +1034,9 @@ void DesignerView::createDesignBoundingBox()
     // Don't create if already exists
     if (m_designBoundingBox) return;
     
-    // Create the main bounding box rectangle
+    // Create the main bounding box rectangle with thinner lines
     m_designBoundingBox = new QGraphicsRectItem();
-    m_designBoundingBox->setPen(QPen(QColor(255, 140, 0), 2, Qt::DashLine));
+    m_designBoundingBox->setPen(QPen(QColor(255, 140, 0), getZoomAdjustedSize(2.0), Qt::DashLine));
     m_designBoundingBox->setBrush(Qt::NoBrush);
     m_designBoundingBox->setVisible(false);
     m_scene->addItem(m_designBoundingBox);
@@ -960,13 +1047,13 @@ void DesignerView::createDesignBoundingBox()
     // Create size labels
     m_widthLabel = new QGraphicsTextItem();
     m_widthLabel->setDefaultTextColor(QColor(255, 180, 80));
-    m_widthLabel->setFont(QFont("Arial", 10, QFont::Bold));
+    m_widthLabel->setFont(QFont("Arial", qRound(getZoomAdjustedSize(10.0)), QFont::Bold));
     m_widthLabel->setVisible(false);
     m_scene->addItem(m_widthLabel);
     
     m_heightLabel = new QGraphicsTextItem();
     m_heightLabel->setDefaultTextColor(QColor(255, 180, 80));
-    m_heightLabel->setFont(QFont("Arial", 10, QFont::Bold));
+    m_heightLabel->setFont(QFont("Arial", qRound(getZoomAdjustedSize(10.0)), QFont::Bold));
     m_heightLabel->setVisible(false);
     m_scene->addItem(m_heightLabel);
 }
@@ -976,12 +1063,17 @@ void DesignerView::createResizeHandles()
     // Don't create if already exist
     if (!m_resizeHandles.isEmpty()) return;
     
-    // Create 8 resize handles (corners and midpoints)
+    // Create 8 resize handles (corners and midpoints) with smaller, thinner design
     for (int i = 0; i < 8; ++i) {
         QGraphicsRectItem *handle = new QGraphicsRectItem();
-        handle->setRect(-HANDLE_SIZE/2, -HANDLE_SIZE/2, HANDLE_SIZE, HANDLE_SIZE);
-        handle->setPen(QPen(QColor(255, 140, 0), 2));
-        handle->setBrush(QBrush(QColor(40, 40, 40)));
+        double handleSize = getZoomAdjustedSize(HANDLE_SIZE); // Make handles smaller
+        handle->setRect(-handleSize/2, -handleSize/2, handleSize, handleSize);
+        handle->setPen(QPen(QColor(255, 140, 0), getZoomAdjustedSize(2.0))); // Thinner pen
+        
+        // Use a more subtle background color for better contrast
+        QColor bgColor = QColor(40, 40, 40, 150); // More transparent, darker
+        handle->setBrush(QBrush(bgColor));
+        
         handle->setVisible(false);
         m_resizeHandles.append(handle);
         m_scene->addItem(handle);
@@ -995,6 +1087,9 @@ void DesignerView::updateDesignBoundingBox()
     // Update the bounding box rectangle
     m_designBoundingBox->setRect(m_currentDesignBounds);
     
+    // Update bounding box pen width based on zoom
+    m_designBoundingBox->setPen(QPen(QColor(255, 140, 0), getZoomAdjustedSize(2.0), Qt::DashLine));
+    
     // Update resize handles
     updateResizeHandles();
     
@@ -1007,8 +1102,10 @@ void DesignerView::updateResizeHandles()
     if (m_resizeHandles.isEmpty()) return;
     
     QRectF rect = m_currentDesignBounds;
+    double handleSize = getZoomAdjustedSize(HANDLE_SIZE);
     
     // Position handles: 0=TL, 1=T, 2=TR, 3=R, 4=BR, 5=B, 6=BL, 7=L
+    // Handles should be centered on the corners and edges
     QPointF positions[8] = {
         rect.topLeft(),                                    // 0: Top-left
         QPointF(rect.center().x(), rect.top()),          // 1: Top
@@ -1021,7 +1118,17 @@ void DesignerView::updateResizeHandles()
     };
     
     for (int i = 0; i < 8 && i < m_resizeHandles.size(); ++i) {
-        m_resizeHandles[i]->setPos(positions[i]);
+        QGraphicsRectItem *handle = m_resizeHandles[i];
+        handle->setPos(positions[i]);
+        
+        // Update handle size and pen width based on zoom - use smaller, thinner design
+        double handleSize = getZoomAdjustedSize(HANDLE_SIZE); // Make handles smaller
+        handle->setRect(-handleSize/2, -handleSize/2, handleSize, handleSize);
+        handle->setPen(QPen(QColor(255, 140, 0), getZoomAdjustedSize(2.0))); // Thinner pen
+        
+        // Maintain consistent background color
+        QColor bgColor = QColor(40, 40, 40, 150);
+        handle->setBrush(QBrush(bgColor));
     }
 }
 
@@ -1031,21 +1138,41 @@ void DesignerView::updateSizeLabels()
     
     QRectF rect = m_currentDesignBounds;
     
+    // Update font sizes based on zoom
+    QFont widthFont = m_widthLabel->font();
+    widthFont.setPointSize(qRound(getZoomAdjustedSize(10.0)));
+    m_widthLabel->setFont(widthFont);
+    
+    QFont heightFont = m_heightLabel->font();
+    heightFont.setPointSize(qRound(getZoomAdjustedSize(10.0)));
+    m_heightLabel->setFont(heightFont);
+    
     // Update width label
     QString widthText = QString("%1 mm").arg(rect.width(), 0, 'f', 1);
     m_widthLabel->setPlainText(widthText);
+    
+    // Position width label below the bounding box with zoom-adjusted spacing
+    // Use a larger spacing to ensure it's clearly outside the bounding box
+    double labelSpacing = getZoomAdjustedSize(10.0);
     QPointF widthPos(rect.center().x() - m_widthLabel->boundingRect().width()/2, 
-                     rect.bottom() + 5);
+                     rect.bottom() + labelSpacing);
     m_widthLabel->setPos(widthPos);
     
     // Update height label
     QString heightText = QString("%1 mm").arg(rect.height(), 0, 'f', 1);
     m_heightLabel->setPlainText(heightText);
     
-    // Rotate height label 90 degrees
+    // Rotate height label 90 degrees and position it to the left of the bounding box
     m_heightLabel->setRotation(-90);
-    QPointF heightPos(rect.left() - 25, 
-                      rect.center().y() + m_heightLabel->boundingRect().width()/2);
+    
+    // Calculate the proper position for the rotated height label
+    // The rotated text's width becomes the height in the original coordinate system
+    double rotatedTextWidth = m_heightLabel->boundingRect().height(); // Height becomes width when rotated
+    double minSpacing = getZoomAdjustedSize(15.0); // Minimum spacing to ensure it's outside
+    double requiredSpacing = qMax(minSpacing, rotatedTextWidth + getZoomAdjustedSize(5.0));
+    
+    QPointF heightPos(rect.left() - requiredSpacing, 
+                      rect.center().y() + rotatedTextWidth/2);
     m_heightLabel->setPos(heightPos);
 }
 
@@ -1053,6 +1180,13 @@ int DesignerView::getResizeHandleAt(const QPointF &pos)
 {
     for (int i = 0; i < m_resizeHandles.size(); ++i) {
         QRectF handleRect = m_resizeHandles[i]->sceneBoundingRect();
+        
+        // Add generous padding to the hit area for easier selection
+        // Use a minimum padding to ensure handles are always grabbable
+        double handleSize = getZoomAdjustedSize(HANDLE_SIZE);
+        double padding = qMax(getZoomAdjustedSize(2.0), handleSize);
+        handleRect.adjust(-padding, -padding, padding, padding);
+        
         if (handleRect.contains(pos)) {
             return i;
         }
@@ -1309,6 +1443,9 @@ SVGDesigner::SVGDesigner(QWidget *parent)
     
     m_zoomSlider->setEnabled(false);
     m_fitButton->setEnabled(false);
+    
+    // Set initial status message about panning controls
+    m_measureLabel->setText(tr("Tip: Middle-click or Shift+Left-click to pan"));
 }
 
 void SVGDesigner::onSvgViewZoomChanged(double zoomFactor)
@@ -1431,8 +1568,6 @@ void SVGDesigner::setupStatusBar()
     // Add the status bar to the layout
     static_cast<QVBoxLayout*>(layout())->addLayout(statusLayout);
 }
-
-
 
 void SVGDesigner::loadSvgFile(const QString &filePath)
 {
@@ -1587,11 +1722,15 @@ void SVGDesigner::onDesignBoundsChanged(QRectF bounds, double scale)
 void SVGDesigner::onMeasureUpdated(double distance, double angle)
 {
     // Update the measurement label in the status bar
-    QString measureText = tr("Distance: %1 mm  Angle: %2°")
-                         .arg(distance, 0, 'f', 2)
-                         .arg(angle, 0, 'f', 1);
-    
-    m_measureLabel->setText(measureText);
+    if (distance > 0) {
+        QString measureText = tr("Distance: %1 mm  Angle: %2°")
+                             .arg(distance, 0, 'f', 2)
+                             .arg(angle, 0, 'f', 1);
+        m_measureLabel->setText(measureText);
+    } else {
+        // Show panning tip when not measuring
+        m_measureLabel->setText(tr("Tip: Middle-click or Shift+Left-click to pan"));
+    }
 }
 
 void SVGDesigner::onSelectToolClicked()
@@ -1649,8 +1788,6 @@ void SVGDesigner::onSnapModeChanged(int index)
     m_designerView->setSnapMode(snapMode);
 }
 
-
-
 void SVGDesigner::setMaterialSize(double width, double height)
 {
     m_designerView->setMaterialSize(width, height);
@@ -1690,4 +1827,84 @@ QPointF SVGDesigner::getDesignOffset() const
         return bounds.topLeft();
     }
     return QPointF();
+}
+
+double DesignerView::getZoomAdjustedSize(double baseSize) const
+{
+    // Scale UI elements based on zoom level
+    // When zoomed in (high zoom factor), UI elements should be smaller
+    // When zoomed out (low zoom factor), UI elements should be larger
+    double adjustedSize = baseSize / m_zoomFactor;
+    
+    // Clamp to reasonable bounds (not too small, not too large)
+    // Use much smaller minimum and maximum sizes for thinner elements
+    double minSize = 0.1;   // Minimum 1 pixel for very thin lines
+    double maxSize = 8.0;   // Maximum 8 pixels to prevent thick blobs
+    
+    return qBound(minSize, adjustedSize, maxSize);
+}
+
+void DesignerView::updateUIElementsForZoom()
+{
+    // Force update of all UI elements when zoom changes
+    if (m_designBoundingBox && m_designBoundingBox->isVisible()) {
+        updateDesignBoundingBox();
+    }
+    
+    // Update viewport to refresh all visual elements
+    viewport()->update();
+}
+
+QPair<QRectF, QRectF> DesignerView::calculateLabelPositions(const QString &materialLabel, const QString &bedLabel, 
+                                                          const QFont &materialFont, const QFont &bedFont) const
+{
+    QRectF materialRect(0, 0, m_materialWidth, m_materialHeight);
+    QRectF bedRect(0, 0, m_bedWidth, m_bedHeight);
+    
+    // Calculate text bounding rectangles
+    QFontMetricsF materialMetrics(materialFont);
+    QFontMetricsF bedMetrics(bedFont);
+    
+    QRectF materialTextRect = materialMetrics.boundingRect(materialLabel);
+    QRectF bedTextRect = bedMetrics.boundingRect(bedLabel);
+    
+    // Calculate padding for each label
+    double materialMinDimension = qMin(m_materialWidth, m_materialHeight);
+    double bedMinDimension = qMin(m_bedWidth, m_bedHeight);
+    
+    double materialPadding = getZoomAdjustedSize(qMin(materialMinDimension * 0.05, 5.0));
+    double bedPadding = getZoomAdjustedSize(qMin(bedMinDimension * 0.04, 4.0));
+    
+    // Position material label at top-left of material
+    QRectF materialLabelRect = materialRect.adjusted(materialPadding, materialPadding, 
+                                                    -materialPadding, -materialPadding);
+    materialLabelRect.setHeight(materialTextRect.height() + materialPadding);
+    materialLabelRect.setWidth(materialTextRect.width() + materialPadding);
+    
+    // Position bed label at top-left of bed
+    QRectF bedLabelRect = bedRect.adjusted(bedPadding, bedPadding * 2, 
+                                          -bedPadding, -bedPadding);
+    bedLabelRect.setHeight(bedTextRect.height() + bedPadding);
+    bedLabelRect.setWidth(bedTextRect.width() + bedPadding);
+    
+    // Check for overlap and adjust if necessary
+    if (materialLabelRect.intersects(bedLabelRect)) {
+        // If material is smaller than bed, move material label to bottom-right
+        if (m_materialWidth < m_bedWidth && m_materialHeight < m_bedHeight) {
+            materialLabelRect.moveRight(materialRect.right() - materialPadding);
+            materialLabelRect.moveBottom(materialRect.bottom() - materialPadding);
+        }
+        // If bed is smaller than material, move bed label to bottom-right
+        else if (m_bedWidth < m_materialWidth && m_bedHeight < m_materialHeight) {
+            bedLabelRect.moveRight(bedRect.right() - bedPadding);
+            bedLabelRect.moveBottom(bedRect.bottom() - bedPadding);
+        }
+        // If they're similar sizes, move material to bottom-right and bed to top-left
+        else {
+            materialLabelRect.moveRight(materialRect.right() - materialPadding);
+            materialLabelRect.moveBottom(materialRect.bottom() - materialPadding);
+        }
+    }
+    
+    return qMakePair(materialLabelRect, bedLabelRect);
 }

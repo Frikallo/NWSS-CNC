@@ -131,6 +131,12 @@ public:
     QList<QGraphicsItem*> getSvgItems() const;
     void updateSvgItemsTransform();
     
+    // Zoom-aware UI sizing
+    double getZoomAdjustedSize(double baseSize) const;
+    void updateUIElementsForZoom();
+    QPair<QRectF, QRectF> calculateLabelPositions(const QString &materialLabel, const QString &bedLabel, 
+                                                 const QFont &materialFont, const QFont &bedFont) const;
+    
 signals:
     void zoomChanged(double zoomFactor);
     void selectionChanged();
