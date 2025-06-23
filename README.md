@@ -39,10 +39,11 @@ NWSS-CNC is a professional 2D Computer-Aided Manufacturing (CAM) software design
 - **Tool Management**: Comprehensive tool database with automatic parameter optimization
 - **Advanced Path Processing**: Clipper2-based polygon operations for professional results
 - **Material Management**: Precise material and bed size configuration
-- **Dark Theme UI**: Modern, professional interface with customizable themes
+- **Smooth UX**: Modern, professional interface with full customizability and user-experience prioritized
 
 ### Target Users
 
+- First-time machinists
 - CNC machine operators
 - CAM professionals
 - Hobbyists and makers
@@ -55,7 +56,7 @@ NWSS-CNC is a professional 2D Computer-Aided Manufacturing (CAM) software design
 
 ### Software Architecture
 
-NWSS-CNC is built using Qt6 with C++17, providing cross-platform compatibility for Windows, macOS, and Linux. The application follows a modular architecture with clear separation between core processing logic and user interface components.
+NWSS-CNC is built using Qt6 with C++17, providing cross-platform compatibility for Windows, macOS, and Linux. The application follows a modular architecture with clear separation between [core processing logic](./nwss-cnc/src/core/) and [user interface components](./nwss-cnc/src/gui/).
 
 ### Core Technologies
 
@@ -69,46 +70,34 @@ NWSS-CNC is built using Qt6 with C++17, providing cross-platform compatibility f
 
 **Input Formats:**
 - SVG (Scalable Vector Graphics) - Primary input format
-- Existing G-code files for editing and visualization
+- Existing G-code files for editing, visualization, and automatic conversion
+- DXF (Drawing Exchange Format) - Future support planned
+- Other vector formats (future support planned)
+- **STL** - Future support planned for 3D models
 
 **Output Formats:**
 - G-code (ISO 6983 standard)
-- SVG export from designer
 
 ---
 
 ## 3. Installation and Setup
 
-### System Requirements
-
-**Minimum Requirements:**
-- Operating System: Windows 10, macOS 10.14, or Linux (Ubuntu 18.04+)
-- RAM: 4GB minimum, 8GB recommended
-- Storage: 100MB free disk space
-- Graphics: OpenGL 3.3 compatible graphics card
-- Display: 1024x768 minimum resolution
-
-**Recommended Requirements:**
-- RAM: 16GB for complex designs
-- Storage: 500MB for tool libraries and projects
-- Display: 1920x1080 or higher resolution
-- Multi-core processor for faster processing
-
 ### Installation Process
 
 #### Windows
-1. Download the installer from the official website
+1. Download the installer from the [release page](https://github.com/Frikallo/NWSS-CNC/releases)
 2. Run the installer as administrator
 3. Follow the installation wizard
-4. Launch NWSS-CNC from the desktop shortcut
+4. Launch NWSS-CNC from the desktop shortcut, start menu, or Program Files directory
 
 #### macOS
 1. Download the .dmg file
 2. Open the disk image
 3. Drag NWSS-CNC to the Applications folder
 4. Launch from Applications or Launchpad
+5. If MacOS blocks the application, go to System Preferences > Security & Privacy and allow it under the "General" tab
 
-#### Linux
+#### Linux - Very soon supported
 1. Download the AppImage or use the package manager
 2. Make the file executable: `chmod +x NWSS-CNC.AppImage`
 3. Run the application: `./NWSS-CNC.AppImage`
@@ -120,7 +109,7 @@ On first launch, NWSS-CNC presents a welcome dialog with options to:
 - Open an existing G-code file
 - Import an SVG file for conversion
 
-The application will automatically create default configuration files and tool databases in the user's home directory.
+The application will automatically create default configuration files and tool databases.
 
 ---
 
@@ -157,24 +146,24 @@ Quick access buttons for common operations:
 **G-Code Editor Tab:**
 - Syntax-highlighted G-code editor
 - Line numbering
-- Find and replace functionality
-- Real-time validation
 
 **3D Viewer Tab:**
 - Interactive 3D toolpath visualization
 - Navigation cube for view control
+- CAD-style camera controls
+- Real-time rendering of toolpaths
 - Animation controls
-- Performance optimization options
+- Level-of-detail (LOD) optimization
 
 #### 4.4 Dock Panels
 
 **G-Code Options Panel:**
 - Material settings (width, height, thickness)
 - Machine settings (bed size, units)
-- Cutting parameters (feed rate, spindle speed, depth)
+- Cutting parameters (feed rate, spindle speed, depth, pass count)
 - Path optimization options
 - Tool selection and parameters
-- Cutting mode selection (perimeter, pocket, punch, engrave)
+- Cutting mode selection (perimeter or punchout)
 
 **Tool Management Panel:**
 - Tool library browser
@@ -182,14 +171,8 @@ Quick access buttons for common operations:
 - Material-specific recommendations
 - Tool validation and warnings
 
-**Machine Panel:**
-- Machine status (if connected)
-- Manual controls
-- Job progress monitoring
-
 #### 4.5 Status Bar
 - Current operation status
-- Processing progress
 - Time estimates
 - File information
 
@@ -243,23 +226,11 @@ The discretization process converts smooth curves into discrete points suitable 
 - Automatic tool compensation
 - Lead-in/lead-out options
 
-#### 5.3.2 Pocketing
-- Removes material from inside closed shapes
-- Spiral and parallel cutting patterns
-- Configurable stepover and overlap
-- Intelligent island detection
-
-#### 5.3.3 Punching/Cutout
+#### 5.3.2 Punching/Cutout
 - Complete material removal through thickness
 - Optimized for parts production
 - Automatic tab generation (future feature)
 - Nest optimization support
-
-#### 5.3.4 Engraving
-- Surface-level material removal
-- Text and logo engraving
-- Variable depth support
-- Fine detail preservation
 
 ### 5.4 G-Code Generation
 
@@ -268,7 +239,6 @@ The discretization process converts smooth curves into discrete points suitable 
 - Customizable header and footer
 - Tool change sequences
 - Spindle control commands
-- Coolant control (if available)
 - Safety height management
 
 #### Optimization Features
@@ -276,7 +246,6 @@ The discretization process converts smooth curves into discrete points suitable 
 - Rapid move optimization
 - Redundant move elimination
 - Linear interpolation for straight segments
-- Arc fitting for circular paths (future)
 
 ---
 
@@ -364,7 +333,6 @@ class Polygon {
 
 - Core processing runs on background threads
 - UI remains responsive during long operations
-- Progress reporting for user feedback
 - Memory-efficient processing of large files
 - Optimized data structures for speed
 
@@ -501,7 +469,7 @@ Automatically determines optimal RPM considering:
 
 ---
 
-## 9. Configuration and Settings
+## 9. Configuration and Settings (Can be changed in the GUI or in the config file)
 
 ### 9.1 Machine Configuration
 
@@ -556,13 +524,6 @@ struct GCodeOptions {
     bool spiralIn;             // Spiral cutting direction
 };
 ```
-
-### 9.4 Configuration File Management
-
-#### File Locations
-- **Windows**: `%APPDATA%/NWSS-CNC/config.ini`
-- **macOS**: `~/Library/Application Support/NWSS-CNC/config.ini`
-- **Linux**: `~/.config/NWSS-CNC/config.ini`
 
 #### File Format
 Configuration files use INI format with sections:
@@ -655,19 +616,6 @@ The input geometry has overlapping or self-intersecting paths:
 - Fix overlapping shapes in the original software
 - Use the built-in geometry repair tools
 
-### 10.3 Log Files and Debugging
-
-#### Log File Locations
-- **Windows**: `%TEMP%/NWSS-CNC/logs/`
-- **macOS**: `/tmp/NWSS-CNC/logs/`
-- **Linux**: `/tmp/NWSS-CNC/logs/`
-
-#### Debug Information
-Enable debug logging by setting environment variable:
-```bash
-export NWSS_CNC_DEBUG=1
-```
-
 ---
 
 ## 11. Development and Extension
@@ -738,14 +686,6 @@ To add new tool types:
 3. Add UI support in tool manager
 4. Update validation logic
 
-### 11.4 Plugin Architecture (Future)
-
-The application is designed to support future plugin development:
-- Dynamic library loading
-- Plugin interface definitions
-- Custom tool implementations
-- Third-party CAM operations
-
 ---
 
 ## 12. Appendices
@@ -788,12 +728,7 @@ The application is designed to support future plugin development:
 - JavaScript interactions
 - External references
 
-### Appendix C: File Format Specifications
-
-#### Configuration File Format (.ini)
-Standard INI format with sections for different parameter groups.
-
-#### Tool Database Format (.json)
+#### Tool Database Format (.json) (Editable in the GUI)
 JSON format for tool library storage:
 ```json
 {
@@ -836,20 +771,6 @@ JSON format for tool library storage:
 - `R`: Reset view
 - `F`: Fit to view
 
-### Appendix E: Performance Tips
-
-#### For Large Files
-- Use appropriate discretization settings
-- Enable path optimization
-- Consider breaking complex designs into smaller parts
-- Use simplified preview modes during editing
-
-#### For Real-time Performance
-- Enable LOD rendering in 3D viewer
-- Limit the number of undo levels
-- Close unused tabs and panels
-- Optimize tool database size
-
 ### Appendix F: Safety Considerations
 
 #### Machine Safety
@@ -872,7 +793,7 @@ NWSS-CNC represents a comprehensive solution for 2D CAM operations, combining pr
 
 The application's commitment to open standards, cross-platform compatibility, and extensible design ensures it can adapt to evolving manufacturing needs while maintaining compatibility with existing workflows.
 
-For additional support, updates, and community resources, visit the official NWSS-CNC website and documentation portal.
+For additional support, contact me personally at noahkay13@gmail.com, or open an issue [here](https://github.com/Frikallo/NWSS-CNC/issues) and I will get back to you as soon as possible.
 
 ---
 
