@@ -797,4 +797,4 @@ For additional support, contact me personally at noahkay13@gmail.com, or open an
 
 ---
 
-*This document serves as both a user guide and technical reference for NWSS-CNC version 1.0.0. For the most current information, please refer to the online documentation.*
+*This document serves as both a user guide and technical reference for NWSS-CNC version 1.0.0.*
