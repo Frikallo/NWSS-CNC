@@ -1,9 +1,11 @@
 # NWSS-CNC
 
-[](./docs/1.png)
-[](./docs/2.png)
-[](./docs/3.png)
-[](./docs/4.png)
+<p align="center">
+  <img src="./docs/1.png" width="350">
+  <img src="./docs/2.png" width="350">
+  <img src="./docs/3.png" width="350">
+  <img src="./docs/4.png" width="350">
+</p>
 
 
 ## Table of Contents
