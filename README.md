@@ -34,11 +34,13 @@ NWSS-CNC is a professional 2D Computer-Aided Manufacturing (CAM) software design
 ### Key Features
 
 - **SVG to G-Code Conversion**: Import SVG files and convert them to optimized G-code
+- **Automatic Margin Detection**: Intelligent removal of empty space from SVG imports for precise sizing
 - **3D Visualization**: Real-time 3D preview of toolpaths with advanced navigation controls
 - **Professional CAM Operations**: Support for perimeter cutting, pocketing, punching, and engraving
 - **Tool Management**: Comprehensive tool database with automatic parameter optimization
 - **Advanced Path Processing**: Clipper2-based polygon operations for professional results
 - **Material Management**: Precise material and bed size configuration
+- **Auto-scaling**: Automatically scales large designs to fit within material bounds
 - **Smooth UX**: Modern, professional interface with full customizability and user-experience prioritized
 
 ### Target Users
@@ -197,12 +199,26 @@ NWSS-CNC features a professional black and orange theme optimized for CNC work e
 - Groups and layers
 - Transformations (scale, rotate, translate)
 
+#### Automatic Margin Detection and Removal
+NWSS-CNC automatically detects and removes empty margins from imported SVG files to ensure precise sizing:
+
+- **Content Bounds Detection**: Analyzes all visible shapes to find the actual content boundaries
+- **Margin Removal**: Creates a cropped SVG with content repositioned to eliminate empty space
+- **Precise Sizing**: When resizing a design to 25x25mm, the actual cutting area is exactly 25x25mm
+- **Auto-scaling**: Large designs are automatically scaled down to fit within 90% of material space
+- **Maintains Aspect Ratio**: Scaling preserves original proportions and centers the design
+
+This feature eliminates the common issue where imported SVGs contain unexpected margins, ensuring that what you see matches what gets cut.
+
 #### SVG Processing Pipeline
 1. **Parsing**: NanoSVG library parses SVG structure
 2. **Shape Extraction**: Individual shapes are identified and cataloged
-3. **Path Discretization**: Curves are converted to linear segments
-4. **Optimization**: Redundant points are removed
-5. **Validation**: Geometry is checked for manufacturing feasibility
+3. **Content Analysis**: Actual content bounds are calculated, excluding empty margins
+4. **Margin Processing**: Empty space is removed and content is repositioned as needed
+5. **Auto-scaling**: Large designs are scaled to fit material bounds if necessary
+6. **Path Discretization**: Curves are converted to linear segments
+7. **Optimization**: Redundant points are removed
+8. **Validation**: Geometry is checked for manufacturing feasibility
 
 ### 5.2 Path Discretization
 
@@ -341,6 +357,13 @@ class Polygon {
 ## 7. Advanced Features
 
 ### 7.1 Professional CAM Operations
+
+#### Intelligent SVG Processing
+Advanced features for optimal CAM workflow:
+- **Automatic Margin Detection**: Smart content boundary analysis eliminates empty space
+- **Precision Sizing**: Ensures cut dimensions exactly match specified sizes
+- **Auto-scaling**: Large designs automatically scaled to fit material with aspect ratio preservation
+- **Content Optimization**: SVG files are intelligently cropped and repositioned for optimal machining
 
 #### Polygon Hierarchy Analysis
 The CAMProcessor implements sophisticated polygon analysis to handle complex nested shapes:
