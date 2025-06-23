@@ -126,6 +126,13 @@ void ToolManager::setupToolEditor() {
 
   // Material and coating
   m_materialCombo = new QComboBox(this);
+  m_materialCombo->addItem("Wood", static_cast<int>(ToolMaterial::WOOD));
+  m_materialCombo->addItem("Plywood", static_cast<int>(ToolMaterial::PLYWOOD));
+  m_materialCombo->addItem("MDF", static_cast<int>(ToolMaterial::MDF));
+  m_materialCombo->addItem("Plastic", static_cast<int>(ToolMaterial::PLASTIC));
+  m_materialCombo->addItem("Acrylic", static_cast<int>(ToolMaterial::ACRYLIC));
+  m_materialCombo->addItem("Steel", static_cast<int>(ToolMaterial::STEEL));
+  m_materialCombo->addItem("Aluminum", static_cast<int>(ToolMaterial::ALUMINUM));
   m_materialCombo->addItem("HSS", static_cast<int>(ToolMaterial::HSS));
   m_materialCombo->addItem("Carbide", static_cast<int>(ToolMaterial::CARBIDE));
   m_materialCombo->addItem("Ceramic", static_cast<int>(ToolMaterial::CERAMIC));

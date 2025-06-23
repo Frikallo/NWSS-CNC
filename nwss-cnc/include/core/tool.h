@@ -25,6 +25,13 @@ enum class ToolType {
  * Enum for tool materials
  */
 enum class ToolMaterial {
+  WOOD,     // Wood
+  PLYWOOD,  // Plywood
+  MDF,      // MDF
+  PLASTIC,  // Plastic
+  ACRYLIC,  // Acrylic
+  STEEL,    // Steel
+  ALUMINUM, // Aluminum
   HSS,      // High-Speed Steel
   CARBIDE,  // Carbide
   CERAMIC,  // Ceramic

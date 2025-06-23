@@ -54,6 +54,20 @@ std::string Tool::getTypeString() const {
 
 std::string Tool::getMaterialString() const {
   switch (material) {
+    case ToolMaterial::WOOD:
+      return "Wood";
+    case ToolMaterial::PLYWOOD:
+      return "Plywood";
+    case ToolMaterial::MDF:
+      return "MDF";
+    case ToolMaterial::PLASTIC:
+      return "Plastic";
+    case ToolMaterial::ACRYLIC:
+      return "Acrylic";
+    case ToolMaterial::STEEL:
+      return "Steel";
+    case ToolMaterial::ALUMINUM:
+      return "Aluminum";
     case ToolMaterial::HSS:
       return "HSS";
     case ToolMaterial::CARBIDE:
