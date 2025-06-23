@@ -1,287 +1,333 @@
 #include "core/utils.h"
-#include "core/svg_parser.h"
-#include "core/config.h"
 
 #include <fstream>
 #include <iomanip>
-#include <sstream>
 #include <iostream>
+#include <sstream>
+
+#include "core/config.h"
+#include "core/svg_parser.h"
 
 namespace nwss {
 namespace cnc {
 
-bool Utils::savePathsToCSV(const std::vector<Path>& paths, const std::string& filename) {
-    std::ofstream outFile(filename);
-    if (!outFile.is_open()) {
-        std::cerr << "Error: Could not open file for writing: " << filename << std::endl;
-        return false;
+bool Utils::savePathsToCSV(const std::vector<Path> &paths,
+                           const std::string &filename) {
+  std::ofstream outFile(filename);
+  if (!outFile.is_open()) {
+    std::cerr << "Error: Could not open file for writing: " << filename
+              << std::endl;
+    return false;
+  }
+
+  outFile << "# Discretized SVG Paths" << std::endl;
+  outFile << "# Format: path_index,point_index,x,y" << std::endl;
+
+  for (size_t pathIndex = 0; pathIndex < paths.size(); pathIndex++) {
+    const auto &points = paths[pathIndex].getPoints();
+    outFile << "# Path " << pathIndex << " (" << points.size() << " points)"
+            << std::endl;
+
+    for (size_t pointIndex = 0; pointIndex < points.size(); pointIndex++) {
+      outFile << pathIndex << "," << pointIndex << "," << points[pointIndex].x
+              << "," << points[pointIndex].y << std::endl;
     }
-    
-    outFile << "# Discretized SVG Paths" << std::endl;
-    outFile << "# Format: path_index,point_index,x,y" << std::endl;
-    
-    for (size_t pathIndex = 0; pathIndex < paths.size(); pathIndex++) {
-        const auto& points = paths[pathIndex].getPoints();
-        outFile << "# Path " << pathIndex << " (" << points.size() << " points)" << std::endl;
-        
-        for (size_t pointIndex = 0; pointIndex < points.size(); pointIndex++) {
-            outFile << pathIndex << "," << pointIndex << "," 
-                    << points[pointIndex].x << "," << points[pointIndex].y << std::endl;
-        }
-        
-        outFile << std::endl; // Empty line between paths
-    }
-    
-    outFile.close();
-    return true;
+
+    outFile << std::endl;  // Empty line between paths
+  }
+
+  outFile.close();
+  return true;
 }
 
-bool Utils::generateVisualization(const std::string& sourceFile, 
-                                const std::vector<Path>& paths,
-                                const std::string& outputFile) {
-    // Parse the original SVG to get dimensions and shapes
-    SVGParser parser;
-    if (!parser.loadFromFile(sourceFile)) {
-        std::cerr << "Error: Could not load source SVG file for visualization." << std::endl;
-        return false;
+bool Utils::generateVisualization(const std::string &sourceFile,
+                                  const std::vector<Path> &paths,
+                                  const std::string &outputFile) {
+  // Parse the original SVG to get dimensions and shapes
+  SVGParser parser;
+  if (!parser.loadFromFile(sourceFile)) {
+    std::cerr << "Error: Could not load source SVG file for visualization."
+              << std::endl;
+    return false;
+  }
+
+  // Calculate bounds of discretized paths to use as our viewBox
+  double minX = std::numeric_limits<double>::max();
+  double minY = std::numeric_limits<double>::max();
+  double maxX = std::numeric_limits<double>::lowest();
+  double maxY = std::numeric_limits<double>::lowest();
+
+  // Find bounds of all paths
+  for (const auto &path : paths) {
+    const auto &points = path.getPoints();
+    for (const auto &point : points) {
+      minX = std::min(minX, point.x);
+      minY = std::min(minY, point.y);
+      maxX = std::max(maxX, point.x);
+      maxY = std::max(maxY, point.y);
     }
-    
-    // Calculate bounds of discretized paths to use as our viewBox
-    double minX = std::numeric_limits<double>::max();
-    double minY = std::numeric_limits<double>::max();
-    double maxX = std::numeric_limits<double>::lowest();
-    double maxY = std::numeric_limits<double>::lowest();
-    
-    // Find bounds of all paths
-    for (const auto& path : paths) {
-        const auto& points = path.getPoints();
-        for (const auto& point : points) {
-            minX = std::min(minX, point.x);
-            minY = std::min(minY, point.y);
-            maxX = std::max(maxX, point.x);
-            maxY = std::max(maxY, point.y);
-        }
+  }
+
+  // Add margin to bounds
+  const double margin = 5.0;
+  minX -= margin;
+  minY -= margin;
+  maxX += margin;
+  maxY += margin;
+
+  // Calculate viewport size
+  double viewWidth = maxX - minX;
+  double viewHeight = maxY - minY;
+
+  std::ofstream vizFile(outputFile);
+  if (!vizFile.is_open()) {
+    std::cerr << "Error: Could not open file for writing: " << outputFile
+              << std::endl;
+    return false;
+  }
+
+  // Generate a new SVG file
+  vizFile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>"
+          << std::endl;
+  vizFile << "<!-- Generated by NWSS-CNC Visualization -->" << std::endl;
+  vizFile << "<svg width=\"" << viewWidth << "mm\" height=\"" << viewHeight
+          << "mm\" viewBox=\"" << minX << " " << minY << " " << viewWidth << " "
+          << viewHeight << "\" xmlns=\"http://www.w3.org/2000/svg\">"
+          << std::endl;
+
+  // Add a semi-transparent background grid
+  vizFile << "  <!-- Background Grid -->" << std::endl;
+  vizFile << "  <pattern id=\"grid\" width=\"10\" height=\"10\" "
+             "patternUnits=\"userSpaceOnUse\">"
+          << std::endl;
+  vizFile << "    <rect width=\"10\" height=\"10\" fill=\"#f8f8f8\"/>"
+          << std::endl;
+  vizFile << "    <path d=\"M 10 0 L 0 0 0 10\" fill=\"none\" "
+             "stroke=\"#e0e0e0\" stroke-width=\"0.5\" />"
+          << std::endl;
+  vizFile << "  </pattern>" << std::endl;
+  vizFile << "  <rect x=\"" << minX << "\" y=\"" << minY << "\" width=\""
+          << viewWidth << "\" height=\"" << viewHeight
+          << "\" fill=\"url(#grid)\" />" << std::endl;
+
+  // Draw discretized paths with path labels
+  vizFile << "  <!-- Discretized Paths -->" << std::endl;
+
+  for (size_t pathIndex = 0; pathIndex < paths.size(); pathIndex++) {
+    const auto &path = paths[pathIndex];
+    const auto &points = path.getPoints();
+    if (points.empty()) continue;
+
+    // Generate a unique color for this path
+    int hue = (pathIndex * 60) % 360;
+    std::string pathColor = "hsl(" + std::to_string(hue) + ", 80%, 50%)";
+
+    // Draw the polyline showing the path
+    vizFile << "  <polyline points=\"";
+    for (const auto &point : points) {
+      vizFile << point.x << "," << point.y << " ";
     }
-    
-    // Add margin to bounds
-    const double margin = 5.0;
-    minX -= margin;
-    minY -= margin;
-    maxX += margin;
-    maxY += margin;
-    
-    // Calculate viewport size
-    double viewWidth = maxX - minX;
-    double viewHeight = maxY - minY;
-    
-    std::ofstream vizFile(outputFile);
-    if (!vizFile.is_open()) {
-        std::cerr << "Error: Could not open file for writing: " << outputFile << std::endl;
-        return false;
+    vizFile << "\" fill=\"none\" stroke=\"" << pathColor
+            << "\" stroke-width=\"1.0\" />" << std::endl;
+
+    // Draw start point (green)
+    if (!points.empty()) {
+      vizFile << "  <circle cx=\"" << points.front().x << "\" cy=\""
+              << points.front().y << "\" r=\"1\" fill=\"green\" />"
+              << std::endl;
     }
-    
-    // Generate a new SVG file
-    vizFile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>" << std::endl;
-    vizFile << "<!-- Generated by NWSS-CNC Visualization -->" << std::endl;
-    vizFile << "<svg width=\"" << viewWidth << "mm\" height=\"" << viewHeight 
-            << "mm\" viewBox=\"" << minX << " " << minY << " " << viewWidth << " " << viewHeight 
-            << "\" xmlns=\"http://www.w3.org/2000/svg\">" << std::endl;
-    
-    // Add a semi-transparent background grid
-    vizFile << "  <!-- Background Grid -->" << std::endl;
-    vizFile << "  <pattern id=\"grid\" width=\"10\" height=\"10\" patternUnits=\"userSpaceOnUse\">" << std::endl;
-    vizFile << "    <rect width=\"10\" height=\"10\" fill=\"#f8f8f8\"/>" << std::endl;
-    vizFile << "    <path d=\"M 10 0 L 0 0 0 10\" fill=\"none\" stroke=\"#e0e0e0\" stroke-width=\"0.5\" />" << std::endl;
-    vizFile << "  </pattern>" << std::endl;
-    vizFile << "  <rect x=\"" << minX << "\" y=\"" << minY << "\" width=\"" << viewWidth << "\" height=\"" << viewHeight 
-            << "\" fill=\"url(#grid)\" />" << std::endl;
-    
-    // Draw discretized paths with path labels
-    vizFile << "  <!-- Discretized Paths -->" << std::endl;
-    
-    for (size_t pathIndex = 0; pathIndex < paths.size(); pathIndex++) {
-        const auto& path = paths[pathIndex];
-        const auto& points = path.getPoints();
-        if (points.empty()) continue;
-        
-        // Generate a unique color for this path
-        int hue = (pathIndex * 60) % 360;
-        std::string pathColor = "hsl(" + std::to_string(hue) + ", 80%, 50%)";
-        
-        // Draw the polyline showing the path
-        vizFile << "  <polyline points=\"";
-        for (const auto& point : points) {
-            vizFile << point.x << "," << point.y << " ";
-        }
-        vizFile << "\" fill=\"none\" stroke=\"" << pathColor << "\" stroke-width=\"1.0\" />" << std::endl;
-        
-        // Draw start point (green)
-        if (!points.empty()) {
-            vizFile << "  <circle cx=\"" << points.front().x << "\" cy=\"" << points.front().y 
-                    << "\" r=\"1\" fill=\"green\" />" << std::endl;
-        }
-        
-        // Draw end point (red)
-        if (points.size() > 1) {
-            vizFile << "  <circle cx=\"" << points.back().x << "\" cy=\"" << points.back().y 
-                    << "\" r=\"1\" fill=\"red\" />" << std::endl;
-        }
-        
-        // Draw interpolated points (blue, smaller)
-        for (size_t i = 1; i < points.size() - 1; i++) {
-            vizFile << "  <circle cx=\"" << points[i].x << "\" cy=\"" << points[i].y 
-                    << "\" r=\"0.8\" fill=\"blue\" />" << std::endl;
-        }
+
+    // Draw end point (red)
+    if (points.size() > 1) {
+      vizFile << "  <circle cx=\"" << points.back().x << "\" cy=\""
+              << points.back().y << "\" r=\"1\" fill=\"red\" />" << std::endl;
     }
-    
-    // Close the SVG file
-    vizFile << "</svg>" << std::endl;
-    
-    vizFile.close();
-    return true;
+
+    // Draw interpolated points (blue, smaller)
+    for (size_t i = 1; i < points.size() - 1; i++) {
+      vizFile << "  <circle cx=\"" << points[i].x << "\" cy=\"" << points[i].y
+              << "\" r=\"0.8\" fill=\"blue\" />" << std::endl;
+    }
+  }
+
+  // Close the SVG file
+  vizFile << "</svg>" << std::endl;
+
+  vizFile.close();
+  return true;
 }
 
-bool Utils::generateMaterialVisualization(const std::vector<Path>& paths, 
-                                        const CNConfig& config,
-                                        const std::string& outputFile) {
-    double materialWidth = config.getMaterialWidth();
-    double materialHeight = config.getMaterialHeight();
-    double bedWidth = config.getBedWidth();
-    double bedHeight = config.getBedHeight();
-    std::string units = config.getUnitsString();
-    
-    // Create SVG file
-    std::ofstream vizFile(outputFile);
-    if (!vizFile.is_open()) {
-        std::cerr << "Error: Could not open file for writing: " << outputFile << std::endl;
-        return false;
+bool Utils::generateMaterialVisualization(const std::vector<Path> &paths,
+                                          const CNConfig &config,
+                                          const std::string &outputFile) {
+  double materialWidth = config.getMaterialWidth();
+  double materialHeight = config.getMaterialHeight();
+  double bedWidth = config.getBedWidth();
+  double bedHeight = config.getBedHeight();
+  std::string units = config.getUnitsString();
+
+  // Create SVG file
+  std::ofstream vizFile(outputFile);
+  if (!vizFile.is_open()) {
+    std::cerr << "Error: Could not open file for writing: " << outputFile
+              << std::endl;
+    return false;
+  }
+
+  // Get maximum dimensions to show
+  double maxWidth = std::max(materialWidth, bedWidth) * 1.1;     // 10% margin
+  double maxHeight = std::max(materialHeight, bedHeight) * 1.1;  // 10% margin
+
+  // Generate SVG file with bed, material, and design visualization
+  // Flip the viewBox to have Y origin at the bottom
+  vizFile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>"
+          << std::endl;
+  vizFile << "<svg width=\"" << maxWidth << units << "\" height=\"" << maxHeight
+          << units << "\" viewBox=\"" << -maxWidth * 0.05 << " "
+          << -maxHeight * 0.05 << " " << maxWidth << " " << maxHeight
+          << "\" xmlns=\"http://www.w3.org/2000/svg\">" << std::endl;
+
+  // Add a transform to flip the Y axis for the entire SVG
+  // This makes the origin at bottom-left, as in CNC coordinates
+  vizFile << "  <g transform=\"translate(0,"
+          << maxHeight - 2 * (maxHeight * 0.05) << ") scale(1,-1)\">"
+          << std::endl;
+
+  // Add title
+  vizFile << "  <title>NWSS CNC Material and Cut Visualization</title>"
+          << std::endl;
+
+  // Draw CNC bed outline
+  vizFile << "  <!-- CNC Bed -->" << std::endl;
+  vizFile << "  <rect x=\"0\" y=\"0\" width=\"" << bedWidth << "\" height=\""
+          << bedHeight
+          << "\" fill=\"#f0f0f0\" stroke=\"#888888\" stroke-width=\"1\" />"
+          << std::endl;
+
+  // Add bed label - note text needs to be flipped back to be readable
+  vizFile << "  <text x=\"" << bedWidth / 2 << "\" y=\"" << -bedHeight * 0.1
+          << "\" font-family=\"Arial\" font-size=\"10\" text-anchor=\"middle\" "
+             "transform=\"scale(1,-1)\">"
+          << "CNC Bed (" << bedWidth << " x " << bedHeight << " " << units
+          << ")</text>" << std::endl;
+
+  // Draw material outline
+  vizFile << "  <!-- Material -->" << std::endl;
+  vizFile << "  <rect x=\"0\" y=\"0\" width=\"" << materialWidth
+          << "\" height=\"" << materialHeight
+          << "\" fill=\"#e0e0e0\" stroke=\"#444444\" stroke-width=\"1\" />"
+          << std::endl;
+
+  // Add material label - note text needs to be flipped back to be readable
+  vizFile << "  <text x=\"" << materialWidth / 2 << "\" y=\""
+          << -materialHeight * 0.2
+          << "\" font-family=\"Arial\" font-size=\"8\" text-anchor=\"middle\" "
+             "transform=\"scale(1,-1)\">"
+          << "Material (" << materialWidth << " x " << materialHeight << " "
+          << units << ")</text>" << std::endl;
+
+  // Draw coordinate system - here Y goes up (positive) from origin
+  vizFile << "  <!-- Coordinate System -->" << std::endl;
+  vizFile << "  <line x1=\"0\" y1=\"0\" x2=\"20\" y2=\"0\" stroke=\"red\" "
+             "stroke-width=\"0.5\" />"
+          << std::endl;
+  vizFile << "  <line x1=\"0\" y1=\"0\" x2=\"0\" y2=\"20\" stroke=\"green\" "
+             "stroke-width=\"0.5\" />"
+          << std::endl;
+  vizFile << "  <text x=\"22\" y=\"-4\" font-family=\"Arial\" font-size=\"6\" "
+             "fill=\"red\" transform=\"scale(1,-1)\">X</text>"
+          << std::endl;
+  vizFile << "  <text x=\"-6\" y=\"-22\" font-family=\"Arial\" font-size=\"6\" "
+             "fill=\"green\" transform=\"scale(1,-1)\">Y</text>"
+          << std::endl;
+
+  // Draw paths (the actual cut design)
+  vizFile << "  <!-- Cut Paths -->" << std::endl;
+  vizFile << "  <g fill=\"none\" stroke=\"blue\" stroke-width=\"0.75\">"
+          << std::endl;
+
+  // Draw each path with points
+  for (size_t pathIndex = 0; pathIndex < paths.size(); pathIndex++) {
+    const auto &points = paths[pathIndex].getPoints();
+    if (points.empty()) continue;
+
+    // Draw polyline for the path
+    vizFile << "    <polyline points=\"";
+    for (const auto &point : points) {
+      vizFile << point.x << "," << point.y << " ";
     }
-    
-    // Get maximum dimensions to show
-    double maxWidth = std::max(materialWidth, bedWidth) * 1.1;  // 10% margin
-    double maxHeight = std::max(materialHeight, bedHeight) * 1.1;  // 10% margin
-    
-    // Generate SVG file with bed, material, and design visualization
-    // Flip the viewBox to have Y origin at the bottom
-    vizFile << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>" << std::endl;
-    vizFile << "<svg width=\"" << maxWidth << units << "\" height=\"" << maxHeight 
-            << units << "\" viewBox=\"" << -maxWidth * 0.05 << " " << -maxHeight * 0.05 
-            << " " << maxWidth << " " << maxHeight 
-            << "\" xmlns=\"http://www.w3.org/2000/svg\">" << std::endl;
-            
-    // Add a transform to flip the Y axis for the entire SVG
-    // This makes the origin at bottom-left, as in CNC coordinates
-    vizFile << "  <g transform=\"translate(0," << maxHeight - 2 * (maxHeight * 0.05) << ") scale(1,-1)\">" << std::endl;
-    
-    // Add title
-    vizFile << "  <title>NWSS CNC Material and Cut Visualization</title>" << std::endl;
-    
-    // Draw CNC bed outline
-    vizFile << "  <!-- CNC Bed -->" << std::endl;
-    vizFile << "  <rect x=\"0\" y=\"0\" width=\"" << bedWidth << "\" height=\"" << bedHeight 
-            << "\" fill=\"#f0f0f0\" stroke=\"#888888\" stroke-width=\"1\" />" << std::endl;
-    
-    // Add bed label - note text needs to be flipped back to be readable
-    vizFile << "  <text x=\"" << bedWidth / 2 << "\" y=\"" << -bedHeight * 0.1 
-            << "\" font-family=\"Arial\" font-size=\"10\" text-anchor=\"middle\" transform=\"scale(1,-1)\">"
-            << "CNC Bed (" << bedWidth << " x " << bedHeight << " " << units << ")</text>" << std::endl;
-    
-    // Draw material outline
-    vizFile << "  <!-- Material -->" << std::endl;
-    vizFile << "  <rect x=\"0\" y=\"0\" width=\"" << materialWidth << "\" height=\"" << materialHeight 
-            << "\" fill=\"#e0e0e0\" stroke=\"#444444\" stroke-width=\"1\" />" << std::endl;
-    
-    // Add material label - note text needs to be flipped back to be readable
-    vizFile << "  <text x=\"" << materialWidth / 2 << "\" y=\"" << -materialHeight * 0.2 
-            << "\" font-family=\"Arial\" font-size=\"8\" text-anchor=\"middle\" transform=\"scale(1,-1)\">"
-            << "Material (" << materialWidth << " x " << materialHeight << " " << units << ")</text>" << std::endl;
-    
-    // Draw coordinate system - here Y goes up (positive) from origin
-    vizFile << "  <!-- Coordinate System -->" << std::endl;
-    vizFile << "  <line x1=\"0\" y1=\"0\" x2=\"20\" y2=\"0\" stroke=\"red\" stroke-width=\"0.5\" />" << std::endl;
-    vizFile << "  <line x1=\"0\" y1=\"0\" x2=\"0\" y2=\"20\" stroke=\"green\" stroke-width=\"0.5\" />" << std::endl;
-    vizFile << "  <text x=\"22\" y=\"-4\" font-family=\"Arial\" font-size=\"6\" fill=\"red\" transform=\"scale(1,-1)\">X</text>" << std::endl;
-    vizFile << "  <text x=\"-6\" y=\"-22\" font-family=\"Arial\" font-size=\"6\" fill=\"green\" transform=\"scale(1,-1)\">Y</text>" << std::endl;
-    
-    // Draw paths (the actual cut design)
-    vizFile << "  <!-- Cut Paths -->" << std::endl;
-    vizFile << "  <g fill=\"none\" stroke=\"blue\" stroke-width=\"0.75\">" << std::endl;
-    
-    // Draw each path with points
-    for (size_t pathIndex = 0; pathIndex < paths.size(); pathIndex++) {
-        const auto& points = paths[pathIndex].getPoints();
-        if (points.empty()) continue;
-        
-        // Draw polyline for the path
-        vizFile << "    <polyline points=\"";
-        for (const auto& point : points) {
-            vizFile << point.x << "," << point.y << " ";
-        }
-        vizFile << "\" />" << std::endl;
-        
-        // Draw dots at each point
-        for (size_t i = 0; i < points.size(); i++) {
-            // Only draw dots for start and end points and every 10th point to reduce clutter
-            if (i == 0 || i == points.size() - 1 || i % 10 == 0) {
-                vizFile << "    <circle cx=\"" << points[i].x << "\" cy=\"" << points[i].y 
-                        << "\" r=\"0.6\" fill=\"" << (i == 0 ? "green" : (i == points.size() - 1 ? "red" : "blue")) << "\" />" << std::endl;
-            }
-        }
+    vizFile << "\" />" << std::endl;
+
+    // Draw dots at each point
+    for (size_t i = 0; i < points.size(); i++) {
+      // Only draw dots for start and end points and every 10th point to reduce
+      // clutter
+      if (i == 0 || i == points.size() - 1 || i % 10 == 0) {
+        vizFile << "    <circle cx=\"" << points[i].x << "\" cy=\""
+                << points[i].y << "\" r=\"0.6\" fill=\""
+                << (i == 0 ? "green"
+                           : (i == points.size() - 1 ? "red" : "blue"))
+                << "\" />" << std::endl;
+      }
     }
-    
-    vizFile << "  </g>" << std::endl;
-    
-    // Close the transform group
-    vizFile << "  </g>" << std::endl;
-    
-    // Close the SVG file
-    vizFile << "</svg>" << std::endl;
-    
-    vizFile.close();
-    return true;
+  }
+
+  vizFile << "  </g>" << std::endl;
+
+  // Close the transform group
+  vizFile << "  </g>" << std::endl;
+
+  // Close the SVG file
+  vizFile << "</svg>" << std::endl;
+
+  vizFile.close();
+  return true;
 }
 
 std::string Utils::colorToHex(uint32_t color) {
-    std::stringstream ss;
-    ss << "#" << std::hex << (color & 0xFFFFFF);
-    return ss.str();
+  std::stringstream ss;
+  ss << "#" << std::hex << (color & 0xFFFFFF);
+  return ss.str();
 }
 
 std::string Utils::formatNumber(double value, int precision) {
-    std::stringstream ss;
-    ss << std::fixed << std::setprecision(precision) << value;
-    return ss.str();
+  std::stringstream ss;
+  ss << std::fixed << std::setprecision(precision) << value;
+  return ss.str();
 }
 
-std::string Utils::getFileExtension(const std::string& path) {
-    size_t pos = path.find_last_of('.');
-    if (pos == std::string::npos) {
-        return "";
-    }
-    return path.substr(pos + 1);
+std::string Utils::getFileExtension(const std::string &path) {
+  size_t pos = path.find_last_of('.');
+  if (pos == std::string::npos) {
+    return "";
+  }
+  return path.substr(pos + 1);
 }
 
-std::string Utils::getBaseName(const std::string& path) {
-    // Find the last directory separator
-    size_t lastSeparator = path.find_last_of("/\\");
-    std::string fileName = (lastSeparator == std::string::npos) ? path : path.substr(lastSeparator + 1);
-    
-    // Remove extension
-    size_t lastDot = fileName.find_last_of('.');
-    if (lastDot != std::string::npos) {
-        fileName = fileName.substr(0, lastDot);
-    }
-    
-    return fileName;
+std::string Utils::getBaseName(const std::string &path) {
+  // Find the last directory separator
+  size_t lastSeparator = path.find_last_of("/\\");
+  std::string fileName = (lastSeparator == std::string::npos)
+                             ? path
+                             : path.substr(lastSeparator + 1);
+
+  // Remove extension
+  size_t lastDot = fileName.find_last_of('.');
+  if (lastDot != std::string::npos) {
+    fileName = fileName.substr(0, lastDot);
+  }
+
+  return fileName;
 }
 
-std::string Utils::replaceExtension(const std::string& path, const std::string& newExtension) {
-    size_t pos = path.find_last_of('.');
-    if (pos == std::string::npos) {
-        return path + "." + newExtension;
-    }
-    return path.substr(0, pos + 1) + newExtension;
+std::string Utils::replaceExtension(const std::string &path,
+                                    const std::string &newExtension) {
+  size_t pos = path.find_last_of('.');
+  if (pos == std::string::npos) {
+    return path + "." + newExtension;
+  }
+  return path.substr(0, pos + 1) + newExtension;
 }
 
-} // namespace cnc
-} // namespace nwss
+}  // namespace cnc
+}  // namespace nwss

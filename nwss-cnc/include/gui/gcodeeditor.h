@@ -1,80 +1,76 @@
 #ifndef GCODEEDITOR_H
 #define GCODEEDITOR_H
 
-#include <QPlainTextEdit>
 #include <QObject>
+#include <QPlainTextEdit>
+#include <QRegularExpression>
 #include <QSyntaxHighlighter>
 #include <QTextCharFormat>
-#include <QRegularExpression>
 
 // Syntax highlighter for GCode
-class GCodeHighlighter : public QSyntaxHighlighter
-{
-    Q_OBJECT
+class GCodeHighlighter : public QSyntaxHighlighter {
+  Q_OBJECT
 
-public:
-    GCodeHighlighter(QTextDocument *parent = nullptr);
+ public:
+  GCodeHighlighter(QTextDocument *parent = nullptr);
 
-protected:
-    void highlightBlock(const QString &text) override;
+ protected:
+  void highlightBlock(const QString &text) override;
 
-private:
-    struct HighlightingRule
-    {
-        QRegularExpression pattern;
-        QTextCharFormat format;
-    };
-    QVector<HighlightingRule> highlightingRules;
+ private:
+  struct HighlightingRule {
+    QRegularExpression pattern;
+    QTextCharFormat format;
+  };
+  QVector<HighlightingRule> highlightingRules;
 
-    QTextCharFormat gCommandFormat;
-    QTextCharFormat mCommandFormat;
-    QTextCharFormat coordinateFormat;
-    QTextCharFormat commentFormat;
-    QTextCharFormat numberFormat;
+  QTextCharFormat gCommandFormat;
+  QTextCharFormat mCommandFormat;
+  QTextCharFormat coordinateFormat;
+  QTextCharFormat commentFormat;
+  QTextCharFormat numberFormat;
 };
 
 // GCode Editor
-class GCodeEditor : public QPlainTextEdit
-{
-    Q_OBJECT
+class GCodeEditor : public QPlainTextEdit {
+  Q_OBJECT
 
-public:
-    GCodeEditor(QWidget *parent = nullptr);
-    
-    void lineNumberAreaPaintEvent(QPaintEvent *event);
-    int lineNumberAreaWidth();
-    void setupCustomCursor();
+ public:
+  GCodeEditor(QWidget *parent = nullptr);
 
-protected:
-    void resizeEvent(QResizeEvent *event) override;
+  void lineNumberAreaPaintEvent(QPaintEvent *event);
+  int lineNumberAreaWidth();
+  void setupCustomCursor();
 
-private slots:
-    void updateLineNumberAreaWidth(int newBlockCount);
-    void highlightCurrentLine();
-    void updateLineNumberArea(const QRect &rect, int dy);
+ protected:
+  void resizeEvent(QResizeEvent *event) override;
 
-private:
-    QWidget *lineNumberArea;
-    GCodeHighlighter *highlighter;
+ private slots:
+  void updateLineNumberAreaWidth(int newBlockCount);
+  void highlightCurrentLine();
+  void updateLineNumberArea(const QRect &rect, int dy);
+
+ private:
+  QWidget *lineNumberArea;
+  GCodeHighlighter *highlighter;
 };
 
 // Line number area for the GCode editor
-class LineNumberArea : public QWidget
-{
-public:
-    LineNumberArea(GCodeEditor *editor) : QWidget(editor), codeEditor(editor) {}
+class LineNumberArea : public QWidget {
+ public:
+  LineNumberArea(GCodeEditor *editor) : QWidget(editor), codeEditor(editor) {}
 
-    QSize sizeHint() const override {
-        return QSize(codeEditor->lineNumberAreaWidth(), 0);
-    }
+  QSize sizeHint() const override {
+    return QSize(codeEditor->lineNumberAreaWidth(), 0);
+  }
 
-protected:
-    void paintEvent(QPaintEvent *event) override {
-        codeEditor->lineNumberAreaPaintEvent(event);
-    }
+ protected:
+  void paintEvent(QPaintEvent *event) override {
+    codeEditor->lineNumberAreaPaintEvent(event);
+  }
 
-private:
-    GCodeEditor *codeEditor;
+ private:
+  GCodeEditor *codeEditor;
 };
 
-#endif // GCODEEDITOR_H
+#endif  // GCODEEDITOR_H
