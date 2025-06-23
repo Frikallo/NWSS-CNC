@@ -170,8 +170,20 @@ MainWindow::MainWindow(QWidget *parent)
     setCurrentFile("");
     readSettings();
     
-    // Show welcome dialog (if not disabled)
+    // Load the last selected tool from settings
     QSettings settings("NWSS", "NWSS-CNC");
+    int lastSelectedToolId = settings.value("lastSelectedToolId", 0).toInt();
+    if (lastSelectedToolId > 0) {
+        // Check if the tool still exists in the registry
+        const nwss::cnc::Tool* tool = toolRegistry->getTool(lastSelectedToolId);
+        if (tool) {
+            toolSelector->setSelectedTool(lastSelectedToolId);
+            statusBar()->showMessage(tr("Restored last selected tool: %1")
+                                   .arg(QString::fromStdString(tool->name)), 3000);
+        }
+    }
+    
+    // Show welcome dialog (if not disabled)
     bool hideWelcomeDialog = settings.value("hideWelcomeDialog", false).toBool();
     
     if (!hideWelcomeDialog) {
@@ -578,10 +590,67 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
     int selectedToolId = toolSelector->getSelectedToolId();
     const nwss::cnc::Tool* selectedTool = toolRegistry->getTool(selectedToolId);
     
-    if (!selectedTool && selectedToolId != 0) {
+    // Check if no tool is selected and show warning dialog
+    if (selectedToolId == 0) {
+        QMessageBox warningBox(this);
+        warningBox.setIcon(QMessageBox::Warning);
+        warningBox.setWindowTitle(tr("No Tool Selected"));
+        warningBox.setText(tr("You must select a tool before generating G-Code for machining."));
+        warningBox.setInformativeText(tr("A tool is required to calculate proper cutting parameters, tool offsets, and feature validation."));
+        
+        QPushButton *selectToolButton = warningBox.addButton(tr("Select Tool"), QMessageBox::ActionRole);
+        QPushButton *continueAnywayButton = warningBox.addButton(tr("Continue Without Tool"), QMessageBox::DestructiveRole);
+        QPushButton *cancelButton = warningBox.addButton(QMessageBox::Cancel);
+        
+        warningBox.setDefaultButton(selectToolButton);
+        
+        int result = warningBox.exec();
+        
+        if (warningBox.clickedButton() == selectToolButton) {
+            // Open tool manager dialog
+            showToolManager();
+            
+            // Check if a tool was selected after opening the tool manager
+            selectedToolId = toolSelector->getSelectedToolId();
+            selectedTool = toolRegistry->getTool(selectedToolId);
+            
+            if (selectedToolId == 0) {
+                // Still no tool selected, abort
+                statusBar()->showMessage(tr("G-Code generation cancelled - no tool selected."), 3000);
+                return;
+            }
+            
+            // Save the selected tool for future sessions
+            QSettings settings("NWSS", "NWSS-CNC");
+            settings.setValue("lastSelectedToolId", selectedToolId);
+            
+        } else if (warningBox.clickedButton() == continueAnywayButton) {
+            // User chose to continue without a tool - show additional warning
+            int confirmResult = QMessageBox::warning(this, tr("Confirm Continue Without Tool"),
+                tr("Continuing without a tool will disable:\n"
+                   "• Tool offset calculations\n" 
+                   "• Feature size validation\n"
+                   "• Optimal cutting parameters\n\n"
+                   "This may result in poor machining results or tool damage.\n\n"
+                   "Are you sure you want to continue?"),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+                
+            if (confirmResult != QMessageBox::Yes) {
+                return;
+            }
+        } else {
+            // User cancelled
+            return;
+        }
+    } else if (!selectedTool) {
         QMessageBox::warning(this, tr("Tool Error"),
                             tr("Selected tool not found. Please select a valid tool."));
         return;
+    } else {
+        // Valid tool selected, save it for future sessions
+        QSettings settings("NWSS", "NWSS-CNC");
+        settings.setValue("lastSelectedToolId", selectedToolId);
     }
     
     try {
@@ -977,10 +1046,22 @@ void MainWindow::showToolManager()
     connect(&toolManager, &nwss::cnc::ToolManager::toolRegistryChanged,
             this, &MainWindow::onToolRegistryChanged);
     
-    // If a tool is selected in the manager dialog, update our selector
+    // If a tool is selected in the manager dialog, update our selector and save it
     connect(&toolManager, &nwss::cnc::ToolManager::toolSelected,
             this, [this](int toolId) {
                 toolSelector->setSelectedTool(toolId);
+                
+                // Save the selected tool to settings
+                QSettings settings("NWSS", "NWSS-CNC");
+                settings.setValue("lastSelectedToolId", toolId);
+                
+                // Update status bar
+                const nwss::cnc::Tool* tool = toolRegistry->getTool(toolId);
+                if (tool) {
+                    statusBar()->showMessage(tr("Selected tool: %1 (diameter: %2mm)")
+                                           .arg(QString::fromStdString(tool->name))
+                                           .arg(tool->diameter), 3000);
+                }
             });
     
     toolManager.exec();
@@ -995,10 +1076,18 @@ void MainWindow::onToolSelected(int toolId)
                                 .arg(QString::fromStdString(tool->name))
                                 .arg(tool->diameter), 3000);
         
+        // Save the selected tool to settings for persistence
+        QSettings settings("NWSS", "NWSS-CNC");
+        settings.setValue("lastSelectedToolId", toolId);
+        
         // TODO: Update G-code generation options with selected tool
         // This could be integrated with the GCodeOptionsPanel
     } else if (toolId == 0) {
         statusBar()->showMessage(tr("No tool selected"), 2000);
+        
+        // Clear the saved tool selection
+        QSettings settings("NWSS", "NWSS-CNC");
+        settings.setValue("lastSelectedToolId", 0);
     }
 }
 
