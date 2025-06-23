@@ -1,4 +1,4 @@
-# NWSS-CNC ![](https://tokei.rs/b1/github/frikallo/nwss-cnc)
+# NWSS-CNC ![](https://tokei.rs/b1/github/frikallo/nwss-cnc?category=code)
 
 <p align="center">
   <img src="./docs/1.png" width="350">
