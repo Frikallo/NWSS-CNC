@@ -1046,9 +1046,10 @@ void MainWindow::about() {
   QMessageBox::about(
       this, tr("About NWSS-CNC"),
       tr("<h3>NWSS-CNC</h3>"
-         "<p>Version 1.0</p>"
-         "<p>A modern CNC control application with G-Code editing, "
-         "3D previewing, and SVG import capabilities.</p>"));
+         "<p>Version 1.3.1</p>"
+         "<p>A modern CNC CAM application with G-Code editing, "
+         "3D previewing, and SVG import capabilities.</p>"
+         "<p>Developped by Noah Kay, 2025</p>"));
 }
 
 void MainWindow::showToolManager() {
