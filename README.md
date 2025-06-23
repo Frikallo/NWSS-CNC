@@ -6,6 +6,7 @@
   <img src="./docs/3.png" width="350">
   <img src="./docs/4.png" width="350">
 </p>
+<h4 align="center">A modern CNC CAM application with intelligent G-Code generation, live 3D preview, and direct SVG-to-toolpath conversion.</h4>
 
 
 ## Table of Contents

@@ -1047,8 +1047,8 @@ void MainWindow::about() {
       this, tr("About NWSS-CNC"),
       tr("<h3>NWSS-CNC</h3>"
          "<p>Version 1.3.1</p>"
-         "<p>A modern CNC CAM application with G-Code editing, "
-         "3D previewing, and SVG import capabilities.</p>"
+         "<p>A modern CNC CAM application with intelligent G-Code generation, "
+         "live 3D preview, and direct SVG-to-toolpath conversion.</p>"
          "<p>Developped by Noah Kay, 2025</p>"));
 }
 
