@@ -849,10 +849,17 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
         // Step 7: Validate tool if selected (show warnings but don't block)
         if (selectedTool) {
             std::vector<std::string> warnings;
+            int maxWarnings = 10;
+            int warningCount = 0;
             if (!generator.validatePaths(paths, warnings)) {
                 QString warningText = tr("Some features may be too small for the selected tool:\n");
                 for (const auto& warning : warnings) {
                     warningText += QString("• %1\n").arg(QString::fromStdString(warning));
+                    warningCount++;
+                    if (warningCount >= maxWarnings) {
+                        warningText += tr("\n...and more warnings.");
+                        break;
+                    }
                 }
                 warningText += tr("\nContinue with G-code generation?");
                 

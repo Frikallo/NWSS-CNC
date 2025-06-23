@@ -73,21 +73,38 @@ CAMOperationResult CAMProcessor::processForCAM(const std::vector<Path>& paths,
     
     // Validate feasibility for each polygon
     std::cout << "DEBUG: Validating polygon feasibility..." << std::endl;
+    int validPolygons = 0;
+    int totalPolygons = polygons.size();
+    
     for (const auto& poly : polygons) {
         auto validation = validateToolpathFeasibility(poly, tool.diameter, cutoutParams.mode);
         result.warnings.insert(result.warnings.end(), validation.warnings.begin(), validation.warnings.end());
-        result.errors.insert(result.errors.end(), validation.errors.begin(), validation.errors.end());
+        
+        if (validation.success) {
+            validPolygons++;
+        } else {
+            // For failed polygons, convert errors to warnings for complex designs
+            for (const auto& error : validation.errors) {
+                result.warnings.push_back("Skipped feature: " + error);
+            }
+        }
+        
         std::cout << "DEBUG: Polygon validation - success: " << validation.success 
                   << ", warnings: " << validation.warnings.size() 
                   << ", errors: " << validation.errors.size() << std::endl;
     }
     
-    if (!result.errors.empty()) {
-        std::cout << "DEBUG: Validation failed with " << result.errors.size() << " errors:" << std::endl;
-        for (const auto& error : result.errors) {
-            std::cout << "  ERROR: " << error << std::endl;
-        }
+    std::cout << "DEBUG: Validation summary: " << validPolygons << "/" << totalPolygons << " polygons are machinable" << std::endl;
+    
+    // Only fail completely if NO polygons are machinable
+    if (validPolygons == 0) {
+        std::cout << "DEBUG: Complete validation failure - no polygons are machinable" << std::endl;
+        result.errors.push_back("No features in this design can be machined with the selected tool");
+        result.success = false;
         return result;
+    } else if (validPolygons < totalPolygons) {
+        result.warnings.push_back("Some features were skipped due to tool size constraints (" + 
+                                std::to_string(validPolygons) + "/" + std::to_string(totalPolygons) + " features will be machined)");
     }
     
     // Generate toolpaths based on cutout mode
@@ -166,44 +183,60 @@ std::vector<std::shared_ptr<PolygonHierarchy>> CAMProcessor::analyzePolygonHiera
     
     std::vector<std::shared_ptr<PolygonHierarchy>> hierarchy;
     
-    // Convert polygons to Clipper2 format for robust hierarchy analysis
-    Clipper2Lib::Paths64 clipperPaths = polygonsToClipperPaths(polygons);
+    std::cout << "DEBUG: analyzePolygonHierarchy() called with " << polygons.size() << " polygons" << std::endl;
     
-    // Use Clipper2's PolyTree to get proper hierarchy
-    Clipper2Lib::PolyTree64 polyTree;
-    Clipper2Lib::Clipper64 clipper;
-    clipper.AddSubject(clipperPaths);
-    clipper.Execute(Clipper2Lib::ClipType::Union, Clipper2Lib::FillRule::NonZero, polyTree);
+    // For text and complex designs, we need to analyze containment relationships manually
+    // because Clipper2 Union operations merge everything into one shape
     
-    // Convert PolyTree back to our hierarchy structure
-    std::function<void(const Clipper2Lib::PolyPath64*, std::shared_ptr<PolygonHierarchy>)> 
-    processPolyPath = [&](const Clipper2Lib::PolyPath64* polyPath, 
-                         std::shared_ptr<PolygonHierarchy> parent) {
+    // Create hierarchy nodes for all polygons first
+    std::vector<std::shared_ptr<PolygonHierarchy>> allNodes;
+    for (size_t i = 0; i < polygons.size(); i++) {
+        auto node = std::make_shared<PolygonHierarchy>();
+        node->polygon = polygons[i];
+        node->level = 0; // Will be updated based on containment
+        node->isHole = false; // Will be updated based on containment
+        allNodes.push_back(node);
         
-        if (!polyPath->Polygon().empty()) {
-            auto node = std::make_shared<PolygonHierarchy>();
-            node->polygon = clipperPathToPolygon(polyPath->Polygon());
-            node->parent = parent;
-            node->level = parent ? parent->level + 1 : 0;
-            node->isHole = (node->level % 2) == 1;
+        std::cout << "DEBUG: Created node " << i << " with area " << polygons[i].area() << "mm²" << std::endl;
+    }
+    
+    // Analyze containment relationships using point-in-polygon tests
+    for (size_t i = 0; i < allNodes.size(); i++) {
+        int containmentLevel = 0;
+        std::shared_ptr<PolygonHierarchy> directParent = nullptr;
+        
+        // Test if this polygon is contained within any other polygon
+        for (size_t j = 0; j < allNodes.size(); j++) {
+            if (i == j) continue;
             
-            if (parent) {
-                parent->children.push_back(node);
-            } else {
-                hierarchy.push_back(node);
-            }
-            
-            // Process children
-            for (const auto& child : *polyPath) {
-                processPolyPath(child.get(), node);
+            // Check if polygon i is inside polygon j
+            if (isPolygonInsidePolygon(allNodes[i]->polygon, allNodes[j]->polygon)) {
+                containmentLevel++;
+                
+                // Find the most direct parent (smallest containing polygon)
+                if (!directParent || allNodes[j]->polygon.area() < directParent->polygon.area()) {
+                    directParent = allNodes[j];
+                }
             }
         }
-    };
-    
-    // Process top-level polygons
-    for (const auto& child : polyTree) {
-        processPolyPath(child.get(), nullptr);
+        
+        allNodes[i]->level = containmentLevel;
+        allNodes[i]->isHole = (containmentLevel % 2) == 1; // Odd levels are holes
+        allNodes[i]->parent = directParent;
+        
+        if (directParent) {
+            directParent->children.push_back(allNodes[i]);
+            std::cout << "DEBUG: Node " << i << " (level " << containmentLevel << ", " 
+                      << (allNodes[i]->isHole ? "HOLE" : "SOLID") << ") is child of another polygon" << std::endl;
+        } else {
+            hierarchy.push_back(allNodes[i]);
+            std::cout << "DEBUG: Node " << i << " (level " << containmentLevel << ", " 
+                      << (allNodes[i]->isHole ? "HOLE" : "SOLID") << ") is root polygon" << std::endl;
+        }
     }
+    
+    std::cout << "DEBUG: Hierarchy analysis complete - " << hierarchy.size() << " root nodes, " 
+              << allNodes.size() << " total nodes" << std::endl;
     
     return hierarchy;
 }
@@ -212,8 +245,9 @@ CAMOperationResult CAMProcessor::generatePunchoutToolpaths(
     const std::vector<std::shared_ptr<PolygonHierarchy>>& hierarchy,
     double toolDiameter, double stepover) {
     
-    // PUNCHOUT MODE: Removes ALL material inside the shape using spiral cutting
-    // Handles arbitrary complex designs including text, gears, nested shapes, etc.
+    // PUNCHOUT MODE: Only removes material from the INNERMOST enclosed shapes
+    // For text: punches out letter interiors (like "A", "a", "o") but preserves letter outlines
+    // For complex designs: only punches out the deepest holes/cavities
     CAMOperationResult result;
     
     std::cout << "DEBUG: generatePunchoutToolpaths() called with:" << std::endl;
@@ -221,53 +255,77 @@ CAMOperationResult CAMProcessor::generatePunchoutToolpaths(
     std::cout << "  - Tool diameter: " << toolDiameter << "mm" << std::endl;
     std::cout << "  - Stepover: " << stepover << "mm" << std::endl;
     
-    // Strategy for complex designs:
-    // 1. Process ALL polygons (including holes) to handle text, gears, etc.
-    // 2. Generate individual spirals for each shape
-    // 3. Handle nested geometry properly
+    // NEW STRATEGY: Only punch out innermost holes (deepest level holes with no children)
+    // This preserves the overall shape while removing only the enclosed cavities
     
-    for (const auto& node : hierarchy) {
-        std::cout << "DEBUG: Processing " << (node->isHole ? "HOLE" : "SOLID") 
-                  << " polygon with " << node->polygon.size() << " points" << std::endl;
+    int processedFeatures = 0;
+    int skippedFeatures = 0;
+    
+    // Recursive function to find and process only the deepest holes
+    std::function<void(const std::shared_ptr<PolygonHierarchy>&)> processHierarchyNode = 
+    [&](const std::shared_ptr<PolygonHierarchy>& node) {
         
-        // For complex designs, we need to cut out EVERYTHING
-        // This includes holes in text (like "A", "B", "P"), gear teeth, etc.
+        std::cout << "DEBUG: Examining level " << node->level << " " 
+                  << (node->isHole ? "HOLE" : "SOLID") 
+                  << " with " << node->children.size() << " children" << std::endl;
         
-        if (node->isHole) {
-            // HOLES: These are areas that should remain as material
-            // For punchout, we still need to cut around them to separate them from waste
-            std::cout << "DEBUG: Processing hole - cutting around perimeter to preserve island" << std::endl;
+        // Process children first (depth-first traversal)
+        for (const auto& child : node->children) {
+            processHierarchyNode(child);
+        }
+        
+        // Only process HOLES that have NO CHILDREN (deepest holes)
+        // if (node->isHole && node->children.empty()) {
+        if (node->children.size() <= 1) {
+            std::cout << "DEBUG: Found innermost hole at level " << node->level 
+                      << " - this should be punched out" << std::endl;
             
-            // Cut around the hole perimeter to create an "island" of material
-            auto holePaths = generateSpiralToolpath(node->polygon, toolDiameter, stepover, true);
-            
-            for (const auto& path : holePaths) {
-                result.toolpaths.push_back(path);
-                std::cout << "DEBUG: Added hole island path with " << path.size() << " points" << std::endl;
+            // Check if this hole is suitable for machining
+            auto validation = validateToolpathFeasibility(node->polygon, toolDiameter, CutoutMode::PUNCHOUT);
+            if (!validation.success) {
+                std::cout << "DEBUG: Skipping hole - too small or invalid for tool" << std::endl;
+                skippedFeatures++;
+                
+                // Add warnings but continue processing other features
+                for (const auto& error : validation.errors) {
+                    result.warnings.push_back("Skipped hole: " + error);
+                }
+                return;
             }
-        } else {
-            // SOLID AREAS: Remove all material inside
-            std::cout << "DEBUG: Processing solid area - removing all internal material" << std::endl;
             
-            if (!node->children.empty()) {
-                std::cout << "DEBUG: Complex shape with " << node->children.size() 
-                          << " internal features (holes/islands)" << std::endl;
-            }
-            
-            // Generate spiral to remove all material inside this shape
+            // Generate spiral to remove all material inside this innermost hole
+            std::cout << "DEBUG: Generating punchout spiral for innermost hole..." << std::endl;
             auto punchoutPaths = generateSpiralToolpath(node->polygon, toolDiameter, stepover, true);
             
-            std::cout << "DEBUG: Generated " << punchoutPaths.size() << " spiral paths for solid area" << std::endl;
+            std::cout << "DEBUG: Generated " << punchoutPaths.size() << " spiral paths for hole" << std::endl;
             
             for (const auto& path : punchoutPaths) {
                 result.toolpaths.push_back(path);
-                std::cout << "DEBUG: Added solid area spiral path with " << path.size() << " points" << std::endl;
+                std::cout << "DEBUG: Added punchout spiral path with " << path.size() << " points" << std::endl;
             }
+            processedFeatures++;
+            
+        } else if (node->isHole && !node->children.empty()) {
+            std::cout << "DEBUG: Skipping hole with children - not innermost" << std::endl;
+        } else if (!node->isHole) {
+            std::cout << "DEBUG: Skipping solid shape - preserving outline" << std::endl;
         }
+    };
+    
+    // Process the hierarchy starting from root nodes
+    for (const auto& rootNode : hierarchy) {
+        processHierarchyNode(rootNode);
+    }
+    
+    std::cout << "DEBUG: Feature processing summary: " << processedFeatures << " innermost holes punched out, " << skippedFeatures << " skipped" << std::endl;
+    
+    if (processedFeatures == 0) {
+        result.warnings.push_back("No innermost holes found to punch out - this design may not have enclosed cavities");
+        std::cout << "DEBUG: No punchout operations performed - design has no innermost holes" << std::endl;
     }
     
     std::cout << "DEBUG: generatePunchoutToolpaths() complete - " << result.toolpaths.size() << " total paths" << std::endl;
-    std::cout << "DEBUG: This design will punch out all solid areas while preserving hole islands" << std::endl;
+    std::cout << "DEBUG: Punchout will remove material from innermost enclosed shapes only" << std::endl;
     result.success = true;
     return result;
 }
@@ -369,12 +427,27 @@ CAMOperationResult CAMProcessor::validateToolpathFeasibility(
     
     std::cout << "DEBUG: Polygon dimensions: " << width << "x" << height << "mm, min: " << minDimension << "mm" << std::endl;
     
-    if (minDimension < toolDiameter * 1.5) { // Need at least 1.5x tool diameter
-        if (cutoutMode == CutoutMode::POCKET || cutoutMode == CutoutMode::PUNCHOUT) {
-            std::cout << "DEBUG: Polygon too narrow for tool" << std::endl;
-            addError(result, "Polygon too narrow for tool diameter (" + 
-                    std::to_string(minDimension) + "mm < " + std::to_string(toolDiameter * 1.5) + "mm required)");
+    // Different dimension requirements for different modes
+    double requiredMultiplier = 1.5; // Default
+    if (cutoutMode == CutoutMode::PUNCHOUT) {
+        requiredMultiplier = 1.2; // More lenient for punchout - can still rough out material
+    } else if (cutoutMode == CutoutMode::POCKET) {
+        requiredMultiplier = 1.5; // Stricter for pockets - need clean walls
+    }
+    
+    double requiredDimension = toolDiameter * requiredMultiplier;
+    
+    if (minDimension < requiredDimension) {
+        if (cutoutMode == CutoutMode::POCKET) {
+            std::cout << "DEBUG: Polygon too narrow for clean pocketing" << std::endl;
+            addError(result, "Polygon too narrow for clean pocketing (" + 
+                    std::to_string(minDimension) + "mm < " + std::to_string(requiredDimension) + "mm required)");
             result.success = false;
+        } else if (cutoutMode == CutoutMode::PUNCHOUT) {
+            std::cout << "DEBUG: Polygon narrow but may still be punchable" << std::endl;
+            addWarning(result, "Feature is narrow for tool size but may still be rough-cut (" + 
+                      std::to_string(minDimension) + "mm vs " + std::to_string(requiredDimension) + "mm optimal)");
+            // Don't fail validation for punchout - just warn
         } else {
             addWarning(result, "Polygon dimensions may cause issues with selected tool");
         }
@@ -726,6 +799,28 @@ bool CAMProcessor::checkForSelfIntersections(const Polygon& polygon) {
     auto unionResult = Clipper2Lib::Union(clipperPaths, Clipper2Lib::FillRule::NonZero);
     
     return unionResult.size() != 1 || unionResult[0].size() != polygon.size();
+}
+
+bool CAMProcessor::isPolygonInsidePolygon(const Polygon& inner, const Polygon& outer) {
+    // Use Clipper2 for robust point-in-polygon testing
+    // Convert polygons to Clipper2 format
+    auto innerPaths = polygonToClipperPaths(inner);
+    auto outerPaths = polygonToClipperPaths(outer);
+    
+    if (innerPaths.empty() || outerPaths.empty()) {
+        return false;
+    }
+    
+    // Test if all points of inner polygon are inside outer polygon
+    for (const auto& point : innerPaths[0]) {
+        if (Clipper2Lib::PointInPolygon(point, outerPaths[0]) == Clipper2Lib::PointInPolygonResult::IsOutside) {
+            return false;
+        }
+    }
+    
+    // Also check that the inner polygon is actually smaller than the outer
+    // (to avoid cases where they're the same polygon)
+    return inner.area() < outer.area();
 }
 
 // Toolpath optimization

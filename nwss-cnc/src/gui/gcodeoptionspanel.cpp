@@ -218,8 +218,8 @@ void GCodeOptionsPanel::setupCuttingTab()
     cutoutModeComboBox = new QComboBox();
     cutoutModeComboBox->addItem("Perimeter", 0);
     cutoutModeComboBox->addItem("Punchout", 1);
-    cutoutModeComboBox->addItem("Pocket", 2);
-    cutoutModeComboBox->addItem("Engrave", 3);
+    // cutoutModeComboBox->addItem("Pocket", 2);
+    // cutoutModeComboBox->addItem("Engrave", 3);
     cutoutModeComboBox->setCurrentIndex(0);
     cutoutModeLayout->addWidget(cutoutModeComboBox);
     groupLayout->addLayout(cutoutModeLayout);

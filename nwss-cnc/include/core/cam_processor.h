@@ -159,6 +159,7 @@ private:
     bool hasInvalidGeometry(const Polygon& polygon);
     double calculateMinimumFeatureSize(const Polygon& polygon);
     bool checkForSelfIntersections(const Polygon& polygon);
+    bool isPolygonInsidePolygon(const Polygon& inner, const Polygon& outer);
     
     // Toolpath optimization
     std::vector<Path> optimizeToolpathOrder(const std::vector<Path>& toolpaths);
