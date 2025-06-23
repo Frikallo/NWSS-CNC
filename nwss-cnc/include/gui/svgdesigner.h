@@ -29,6 +29,13 @@
 #include <QUndoCommand>
 #include <QAction>
 
+// Forward declarations
+namespace nwss {
+namespace cnc {
+struct SVGContentBounds;
+}
+}
+
 class DesignerView : public QGraphicsView
 {
     Q_OBJECT
@@ -175,6 +182,10 @@ private:
     int getResizeHandleAt(const QPointF &pos);
     void performResize(const QPointF &currentPos);
     
+    // SVG content modification
+    QString createCroppedSvg(const QString &originalSvg, const nwss::cnc::SVGContentBounds &contentBounds);
+    QString extractSvgContent(const QString &originalSvg);
+    
     // Main components
     QGraphicsScene *m_scene;
     QSvgRenderer *m_renderer;
@@ -235,6 +246,7 @@ private:
     // SVG content tracking
     QRectF m_originalSvgBounds;
     QList<QGraphicsItem*> m_svgItems;
+    bool m_hasContentBounds;  // Whether we detected and are using content bounds
     
     // Constants
     static const double RASTERIZATION_THRESHOLD;

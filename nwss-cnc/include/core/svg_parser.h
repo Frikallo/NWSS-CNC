@@ -25,6 +25,17 @@ struct SVGShapeInfo {
 };
 
 /**
+ * Structure to hold content bounds information
+ */
+struct SVGContentBounds {
+    float minX, minY, maxX, maxY;  // Actual content bounds
+    float width, height;           // Content dimensions
+    bool isEmpty;                  // True if no content found
+    
+    SVGContentBounds() : minX(0), minY(0), maxX(0), maxY(0), width(0), height(0), isEmpty(true) {}
+};
+
+/**
  * Class to parse and extract information from SVG files
  */
 class SVGParser {
@@ -35,8 +46,17 @@ public:
     // Parse an SVG file and load it into memory
     bool loadFromFile(const std::string& filename, const std::string& units = "mm", float dpi = 96.0f);
     
-    // Get the dimensions of the loaded SVG
+    // Get the dimensions of the loaded SVG (original dimensions including margins)
     bool getDimensions(float& width, float& height) const;
+    
+    // Get the content bounds (actual shape boundaries without margins)
+    SVGContentBounds getContentBounds() const;
+    
+    // Get the dimensions of just the content (without margins)
+    bool getContentDimensions(float& width, float& height) const;
+    
+    // Get the content bounds with an optional margin in mm
+    SVGContentBounds getContentBoundsWithMargin(float marginMm = 0.0f) const;
     
     // Get all shape information from the loaded SVG
     std::vector<SVGShapeInfo> getShapeInfo() const;
@@ -58,6 +78,9 @@ private:
     
     // Helper function to extract shape info
     SVGShapeInfo extractShapeInfo(NSVGshape* shape) const;
+    
+    // Helper function to calculate content bounds from all shapes
+    void calculateContentBounds(SVGContentBounds& bounds) const;
 };
 
 } // namespace cnc

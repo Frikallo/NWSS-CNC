@@ -69,14 +69,24 @@ QString SvgToGCode::convertSvgToGCode(
     }
     qDebug() << "Step 1: SVG loading took" << stepTimer.elapsed() << "ms";
     
-    // Step 2: Get dimensions
+    // Step 2: Get dimensions and detect content bounds
     stepTimer.restart();
     float width, height;
     if (parser.getDimensions(width, height)) {
-        qDebug() << "SVG Dimensions: " << width << " x " << height << " mm";
+        qDebug() << "Original SVG Dimensions: " << width << " x " << height << " mm";
     } else {
         m_lastError = "Failed to get SVG dimensions.";
         return QString();
+    }
+    
+    // Get content bounds to automatically remove margins
+    nwss::cnc::SVGContentBounds contentBounds = parser.getContentBounds();
+    if (!contentBounds.isEmpty) {
+        qDebug() << "Content Bounds (margins removed): " << contentBounds.width << " x " << contentBounds.height << " mm";
+        qDebug() << "Margin removal: Original(" << width << "x" << height << ") -> Content(" 
+                 << contentBounds.width << "x" << contentBounds.height << ")";
+    } else {
+        qDebug() << "No content bounds detected, using original dimensions";
     }
     qDebug() << "Step 2: Get dimensions took" << stepTimer.elapsed() << "ms";
     

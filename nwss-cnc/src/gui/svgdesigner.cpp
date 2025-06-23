@@ -1,5 +1,6 @@
 #include "svgdesigner.h"
 #include "mainwindow.h"
+#include "core/svg_parser.h"
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QSvgRenderer>
@@ -17,6 +18,10 @@
 #include <QColorDialog>
 #include <QFontDialog>
 #include <QGroupBox>
+#include <QFile>
+#include <QDir>
+#include <QTextStream>
+#include <QRegularExpression>
 
 // Define the static constant
 const double DesignerView::RASTERIZATION_THRESHOLD = 2.0;
@@ -48,7 +53,8 @@ DesignerView::DesignerView(QWidget *parent)
       m_isResizing(false),
       m_activeResizeHandle(-1),
       m_designScale(1.0),
-      m_isMovingBoundingBox(false)
+      m_isMovingBoundingBox(false),
+      m_hasContentBounds(false)
 {
     // Set up the scene
     m_scene = new QGraphicsScene(this);
@@ -112,15 +118,65 @@ void DesignerView::setSvgFile(const QString &filePath)
     
     m_filePath = filePath;
     
-    // Try to load the SVG file
-    m_renderer = new QSvgRenderer(filePath);
+    // Parse SVG with our enhanced parser to detect content bounds
+    // Use "px" units and 96 DPI to get raw coordinates without conversion
+    nwss::cnc::SVGParser parser;
+    if (!parser.loadFromFile(filePath.toStdString(), "px", 96.0f)) {
+        QMessageBox::warning(this, tr("SVG Parse Error"), 
+                             tr("Failed to parse SVG file for content bounds: %1").arg(filePath));
+        // Continue with default behavior if parsing fails
+    }
+    
+    // Get content bounds to automatically remove margins
+    nwss::cnc::SVGContentBounds contentBounds = parser.getContentBounds();
+    qDebug() << "Content bounds detected:" << !contentBounds.isEmpty 
+             << "Width:" << contentBounds.width << "Height:" << contentBounds.height;
+    
+    QString svgToLoad = filePath;
+    
+    // If we detected content bounds with margins, create a modified SVG
+    if (!contentBounds.isEmpty) {
+        // Read the original SVG file
+        QFile originalFile(filePath);
+        if (originalFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QString originalSvgContent = originalFile.readAll();
+            originalFile.close();
+            qDebug() << "Original SVG content length:" << originalSvgContent.length();
+            
+            // Create a modified SVG that crops to content bounds
+            QString modifiedSvgContent = createCroppedSvg(originalSvgContent, contentBounds);
+            qDebug() << "Modified SVG content length:" << modifiedSvgContent.length();
+            
+            // Write the modified SVG to a temporary file
+            QString tempPath = QDir::temp().filePath("nwss_cnc_cropped.svg");
+            QFile tempFile(tempPath);
+            if (tempFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                tempFile.write(modifiedSvgContent.toUtf8());
+                tempFile.close();
+                svgToLoad = tempPath;
+                m_hasContentBounds = true;
+                qDebug() << "Created temporary SVG at:" << tempPath;
+                
+                // Get original dimensions for the message
+                float origWidth, origHeight;
+                parser.getDimensions(origWidth, origHeight);
+            }
+        }
+    } else {
+        m_hasContentBounds = false;
+    }
+    
+    // Try to load the SVG file (original or modified)
+    qDebug() << "Loading SVG file:" << svgToLoad;
+    m_renderer = new QSvgRenderer(svgToLoad);
     if (!m_renderer->isValid()) {
         delete m_renderer;
         m_renderer = nullptr;
         QMessageBox::warning(this, tr("SVG Load Error"), 
-                             tr("Failed to load SVG file: %1").arg(filePath));
+                             tr("Failed to load SVG file: %1").arg(svgToLoad));
         return;
     }
+    qDebug() << "SVG renderer created successfully. Default size:" << m_renderer->defaultSize();
     
     // Create SVG items from the renderer elements
     QGraphicsSvgItem *svgItem = new QGraphicsSvgItem();
@@ -134,7 +190,7 @@ void DesignerView::setSvgFile(const QString &filePath)
     m_svgItems.clear();
     m_svgItems.append(svgItem);
     
-    // Get SVG bounds and set scene rect
+    // Set SVG bounds to the renderer's default size (which is now the content size if we cropped)
     m_svgBounds = QRectF(QPointF(0, 0), m_renderer->defaultSize());
     m_originalSvgBounds = m_svgBounds;  // Store original bounds for scaling reference
     
@@ -155,12 +211,97 @@ void DesignerView::setSvgFile(const QString &filePath)
     // Initialize design bounds to match SVG bounds
     m_currentDesignBounds = m_svgBounds;
     
+    // If we have content bounds (margin removal), auto-scale to fit material with padding
+    if (m_hasContentBounds) {
+        // Use the renderer's default size (in mm) for scaling calculations instead of raw content bounds
+        QSizeF rendererSize = m_renderer->defaultSize();
+        double renderedWidth = rendererSize.width();
+        double renderedHeight = rendererSize.height();
+        
+        qDebug() << "Auto-scaling check: rendered SVG=" << renderedWidth << "x" << renderedHeight 
+                 << "mm, material=" << m_materialWidth << "x" << m_materialHeight << "mm";
+        
+        // Calculate scale to fit within material bounds with 10% padding
+        double paddingFactor = 0.9; // Use 90% of material space
+        double materialFitWidth = m_materialWidth * paddingFactor;
+        double materialFitHeight = m_materialHeight * paddingFactor;
+        
+        double scaleX = materialFitWidth / renderedWidth;
+        double scaleY = materialFitHeight / renderedHeight;
+        double autoScale = std::min(scaleX, scaleY);
+        
+        qDebug() << "Scale factors: scaleX=" << scaleX << "scaleY=" << scaleY << "autoScale=" << autoScale;
+        
+        // Only scale down if the content is larger than material bounds
+        if (autoScale < 1.0) {
+            double newWidth = renderedWidth * autoScale;
+            double newHeight = renderedHeight * autoScale;
+            
+            // Center the scaled design on the material
+            double centerX = m_materialWidth / 2.0;
+            double centerY = m_materialHeight / 2.0;
+            
+            m_currentDesignBounds = QRectF(
+                centerX - newWidth/2.0,
+                centerY - newHeight/2.0,
+                newWidth,
+                newHeight
+            );
+            
+            qDebug() << "Auto-scaled content from" << contentBounds.width << "x" << contentBounds.height 
+                     << "to" << newWidth << "x" << newHeight << "to fit material";
+        }
+    }
+    
     // Recreate the design bounding box
     createDesignBoundingBox();
     updateDesignBoundingBox();
     
     // Initially sync SVG with the design bounds
     updateSvgItemsTransform();
+}
+
+QString DesignerView::createCroppedSvg(const QString &originalSvg, const nwss::cnc::SVGContentBounds &contentBounds)
+{
+    // Create a new SVG that crops to the content bounds
+    // Use a viewBox that starts at 0,0 and has the content dimensions
+    // Then wrap the content in a group with a transform to translate it to 0,0
+    QString croppedSvg = QString(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<svg width=\"%1mm\" height=\"%2mm\" viewBox=\"0 0 %3 %4\" xmlns=\"http://www.w3.org/2000/svg\">\n"
+        "  <g transform=\"translate(%5,%6)\">\n"
+        "%7"
+        "  </g>\n"
+        "</svg>"
+    )
+    .arg(QString::number(contentBounds.width, 'f', 3))
+    .arg(QString::number(contentBounds.height, 'f', 3))
+    .arg(QString::number(contentBounds.width, 'f', 3))
+    .arg(QString::number(contentBounds.height, 'f', 3))
+    .arg(QString::number(-contentBounds.minX, 'f', 3))  // Negative to translate to origin
+    .arg(QString::number(-contentBounds.minY, 'f', 3))  // Negative to translate to origin
+    .arg(extractSvgContent(originalSvg));
+    
+    qDebug() << "Creating cropped SVG with transform translate(" << -contentBounds.minX << "," << -contentBounds.minY << ")";
+    
+    return croppedSvg;
+}
+
+QString DesignerView::extractSvgContent(const QString &originalSvg)
+{
+    // Extract content between <svg> and </svg> tags, excluding the svg element itself
+    QRegularExpression svgContentRegex("<svg[^>]*>(.*)</svg>", QRegularExpression::DotMatchesEverythingOption);
+    QRegularExpressionMatch match = svgContentRegex.match(originalSvg);
+    
+    if (match.hasMatch()) {
+        QString content = match.captured(1);
+        qDebug() << "Extracted SVG content length:" << content.length();
+        return content;
+    }
+    
+    qDebug() << "Failed to extract SVG content, using original";
+    // Fallback: return original content if we can't parse it
+    return originalSvg;
 }
 
 void DesignerView::updateRasterizedImage()
@@ -1140,11 +1281,12 @@ void DesignerView::updateSizeLabels()
     
     // Update font sizes based on zoom
     QFont widthFont = m_widthLabel->font();
-    widthFont.setPointSize(qRound(getZoomAdjustedSize(10.0)));
+    int fontSize = qMax(1, qRound(getZoomAdjustedSize(10.0))); // Ensure minimum size of 1
+    widthFont.setPointSize(fontSize);
     m_widthLabel->setFont(widthFont);
     
     QFont heightFont = m_heightLabel->font();
-    heightFont.setPointSize(qRound(getZoomAdjustedSize(10.0)));
+    heightFont.setPointSize(fontSize);
     m_heightLabel->setFont(heightFont);
     
     // Update width label

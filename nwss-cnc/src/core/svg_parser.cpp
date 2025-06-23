@@ -1,5 +1,8 @@
 #include "core/svg_parser.h"
 #include "nanosvg.h"
+#include <limits>
+#include <cmath>
+#include <cstdio>
 
 namespace nwss {
 namespace cnc {
@@ -29,6 +32,50 @@ bool SVGParser::getDimensions(float& width, float& height) const {
     height = m_image->height;
     
     return true;
+}
+
+SVGContentBounds SVGParser::getContentBounds() const {
+    SVGContentBounds bounds;
+    
+    if (!m_image) {
+        return bounds;
+    }
+    
+    calculateContentBounds(bounds);
+    return bounds;
+}
+
+bool SVGParser::getContentDimensions(float& width, float& height) const {
+    SVGContentBounds bounds = getContentBounds();
+    
+    if (bounds.isEmpty) {
+        return false;
+    }
+    
+    width = bounds.width;
+    height = bounds.height;
+    
+    return true;
+}
+
+SVGContentBounds SVGParser::getContentBoundsWithMargin(float marginMm) const {
+    SVGContentBounds bounds = getContentBounds();
+    
+    if (bounds.isEmpty) {
+        return bounds;
+    }
+    
+    // Add margin to all sides
+    bounds.minX -= marginMm;
+    bounds.minY -= marginMm;
+    bounds.maxX += marginMm;
+    bounds.maxY += marginMm;
+    
+    // Update width and height
+    bounds.width = bounds.maxX - bounds.minX;
+    bounds.height = bounds.maxY - bounds.minY;
+    
+    return bounds;
 }
 
 std::vector<SVGShapeInfo> SVGParser::getShapeInfo() const {
@@ -102,6 +149,72 @@ SVGShapeInfo SVGParser::extractShapeInfo(NSVGshape* shape) const {
     }
     
     return info;
+}
+
+void SVGParser::calculateContentBounds(SVGContentBounds& bounds) const {
+    if (!m_image || !m_image->shapes) {
+        bounds.isEmpty = true;
+        return;
+    }
+    
+    bool firstShape = true;
+    int shapeCount = 0;
+    
+    // Iterate through all shapes to find the actual content bounds
+    for (NSVGshape* shape = m_image->shapes; shape != nullptr; shape = shape->next) {
+        shapeCount++;
+        
+        // Debug: Print shape information
+        printf("Shape %d: bounds[%.3f, %.3f, %.3f, %.3f], visible=%d, fill=%d, stroke=%d\n",
+               shapeCount, shape->bounds[0], shape->bounds[1], shape->bounds[2], shape->bounds[3],
+               (shape->flags & NSVG_FLAGS_VISIBLE) ? 1 : 0,
+               shape->fill.type, shape->stroke.type);
+        
+        // Skip invisible shapes
+        if (!(shape->flags & NSVG_FLAGS_VISIBLE)) {
+            printf("  Skipping invisible shape\n");
+            continue;
+        }
+        
+        // Skip shapes with no fill and no stroke
+        if (shape->fill.type == NSVG_PAINT_NONE && shape->stroke.type == NSVG_PAINT_NONE) {
+            printf("  Skipping shape with no fill/stroke\n");
+            continue;
+        }
+        
+        // Initialize bounds with first valid shape
+        if (firstShape) {
+            bounds.minX = shape->bounds[0];
+            bounds.minY = shape->bounds[1];
+            bounds.maxX = shape->bounds[2];
+            bounds.maxY = shape->bounds[3];
+            bounds.isEmpty = false;
+            firstShape = false;
+            printf("  Using as first shape bounds: [%.3f, %.3f, %.3f, %.3f]\n",
+                   bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
+        } else {
+            // Expand bounds to include this shape
+            float oldMinX = bounds.minX, oldMinY = bounds.minY, oldMaxX = bounds.maxX, oldMaxY = bounds.maxY;
+            bounds.minX = std::min(bounds.minX, shape->bounds[0]);
+            bounds.minY = std::min(bounds.minY, shape->bounds[1]);
+            bounds.maxX = std::max(bounds.maxX, shape->bounds[2]);
+            bounds.maxY = std::max(bounds.maxY, shape->bounds[3]);
+            printf("  Expanding bounds from [%.3f, %.3f, %.3f, %.3f] to [%.3f, %.3f, %.3f, %.3f]\n",
+                   oldMinX, oldMinY, oldMaxX, oldMaxY,
+                   bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
+        }
+    }
+    
+    // Calculate width and height if we found any content
+    if (!bounds.isEmpty) {
+        bounds.width = bounds.maxX - bounds.minX;
+        bounds.height = bounds.maxY - bounds.minY;
+        
+        // Ensure we have positive dimensions
+        if (bounds.width <= 0 || bounds.height <= 0) {
+            bounds.isEmpty = true;
+        }
+    }
 }
 
 } // namespace cnc
