@@ -1,7 +1,5 @@
 #include "core/svg_parser.h"
 #include "nanosvg.h"
-#include <limits>
-#include <cmath>
 #include <cstdio>
 
 namespace nwss {
@@ -136,7 +134,7 @@ SVGShapeInfo SVGParser::extractShapeInfo(NSVGshape* shape) const {
     }
     
     // Extract basic shape information
-    info.id = shape->id ? shape->id : "";
+    info.id = shape->id;
     
     // Extract colors and stroke width
     info.fillColor = shape->fill.color;

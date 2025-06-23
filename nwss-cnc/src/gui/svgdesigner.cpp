@@ -1,5 +1,4 @@
 #include "svgdesigner.h"
-#include "mainwindow.h"
 #include "core/svg_parser.h"
 #include <QFileDialog>
 #include <QMessageBox>

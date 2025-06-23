@@ -600,7 +600,7 @@ void GCodeViewer3D::drawViewCube(QPainter* painter) {
             int textWidth = fm.horizontalAdvance(face.label);
             
             painter->drawText(
-                QPointF(labelPos.x() * m_cubeSize/2 - textWidth/2,
+                QPointF(labelPos.x() * m_cubeSize/2 - static_cast<float>(textWidth)/2,
                         labelPos.y() * m_cubeSize/2 + 4),
                 face.label
             );

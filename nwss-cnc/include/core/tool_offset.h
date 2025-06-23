@@ -3,9 +3,8 @@
 
 #include "core/geometry.h"
 #include "core/tool.h"
-#include "clipper2/clipper.h"
+#include <clipper2/clipper.h>
 #include <vector>
-#include <memory>
 #include <string>
 
 namespace nwss {

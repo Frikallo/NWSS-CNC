@@ -1,6 +1,5 @@
 #include "core/area_cutter.h"
 #include "core/cam_processor.h"
-#include <iostream>
 
 namespace nwss {
 namespace cnc {

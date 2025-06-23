@@ -1,10 +1,7 @@
 #define _USE_MATH_DEFINES
 #include "core/cam_processor.h"
-#include "core/tool_offset.h"
 #include <algorithm>
 #include <cmath>
-#include <numeric>
-#include <set>
 #include <functional>
 #include <iostream>
 

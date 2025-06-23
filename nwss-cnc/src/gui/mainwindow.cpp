@@ -27,7 +27,6 @@
 #include "gcode_generator.h"
 #include <QDebug>
 #include <QProgressBar>
-#include <sstream>
 
 class WelcomeDialog : public QDialog
 {

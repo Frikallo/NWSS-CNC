@@ -1,10 +1,8 @@
 #define _USE_MATH_DEFINES
 #include "core/tool.h"
 #include <fstream>
-#include <sstream>
 #include <algorithm>
 #include <iostream>
-#include <cmath>
 
 #ifdef _WIN32
 #define NOMINMAX

@@ -22,9 +22,6 @@
 #include "svgdesigner.h"
 #include "toolmanager.h"
 #include "core/tool.h"
-#include "core/config.h"
-#include "core/transform.h"
-#include "core/geometry.h"
 
 class MainWindow : public QMainWindow
 {

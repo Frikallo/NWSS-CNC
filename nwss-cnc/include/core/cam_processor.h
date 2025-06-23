@@ -4,7 +4,7 @@
 #include "core/geometry.h"
 #include "core/config.h"
 #include "core/tool.h"
-#include "clipper2/clipper.h"
+#include <clipper2/clipper.h>
 #include <vector>
 #include <string>
 #include <memory>

@@ -4,7 +4,6 @@
 #include "core/geometry.h"
 #include "core/config.h"
 #include "core/tool.h"
-#include "core/tool_offset.h"
 #include "core/area_cutter.h"
 #include <string>
 #include <vector>
