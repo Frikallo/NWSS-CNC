@@ -10,18 +10,18 @@
 
 ## Table of Contents
 
-1. [Introduction](#introduction)
-2. [System Overview](#system-overview)
-3. [Installation and Setup](#installation-and-setup)
-4. [User Interface Guide](#user-interface-guide)
-5. [Core Features](#core-features)
-6. [Technical Architecture](#technical-architecture)
-7. [Advanced Features](#advanced-features)
-8. [Tool Management](#tool-management)
-9. [Configuration and Settings](#configuration-and-settings)
-10. [Troubleshooting](#troubleshooting)
-11. [Development and Extension](#development-and-extension)
-12. [Appendices](#appendices)
+1. [Introduction](#1-introduction)
+2. [System Overview](#2-system-overview)
+3. [Installation and Setup](#3-installation-and-setup)
+4. [User Interface Guide](#4-user-interface-guide)
+5. [Core Features](#5-core-features)
+6. [Technical Architecture](#6-technical-architecture)
+7. [Advanced Features](#7-advanced-features)
+8. [Tool Management](#8-tool-management)
+9. [Configuration and Settings](#9-configuration-and-settings)
+9. [Troubleshooting](#10-troubleshooting)
+11. [Development and Extension](#11-development-and-extension)
+12. [Appendices](#12-appendices)
 
 ---
 
@@ -469,7 +469,7 @@ Automatically determines optimal RPM considering:
 
 ---
 
-## 9. Configuration and Settings (Can be changed in the GUI or in the config file)
+## 9. Configuration and Settings
 
 ### 9.1 Machine Configuration
 
