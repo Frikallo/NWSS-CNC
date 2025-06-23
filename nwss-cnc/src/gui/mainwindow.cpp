@@ -838,6 +838,12 @@ void MainWindow::convertSvgToGCode(const QString &svgFile)
         gCodeOptions.includeHeader = true;
         gCodeOptions.returnToOrigin = true;
         
+        // Set cutout mode parameters
+        gCodeOptions.cutoutMode = static_cast<nwss::cnc::CutoutMode>(gcodeOptionsPanel->getCutoutMode());
+        gCodeOptions.stepover = gcodeOptionsPanel->getStepover();
+        gCodeOptions.maxStepover = gcodeOptionsPanel->getMaxStepover();
+        gCodeOptions.spiralIn = gcodeOptionsPanel->getSpiralIn();
+        
         generator.setOptions(gCodeOptions);
 
         // Step 7: Validate tool if selected (show warnings but don't block)

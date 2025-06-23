@@ -51,7 +51,11 @@ public:
         bool separateRetract,
         bool linearizePaths,
         double linearizeTolerance,
-        double toolDiameter);
+        double toolDiameter,
+        int cutoutMode,
+        double stepover,
+        double maxStepover,
+        bool spiralIn);
     
     // Get any error that occurred during conversion
     QString lastError() const { return m_lastError; }

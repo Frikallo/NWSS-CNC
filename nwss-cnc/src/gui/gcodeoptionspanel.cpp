@@ -212,6 +212,45 @@ void GCodeOptionsPanel::setupCuttingTab()
     QGroupBox *cutGroup = new QGroupBox("Cutting Settings", cuttingTab);
     QVBoxLayout *groupLayout = new QVBoxLayout(cutGroup);
     
+    // Cutout Mode
+    QHBoxLayout *cutoutModeLayout = new QHBoxLayout();
+    cutoutModeLayout->addWidget(new QLabel("Cutout Mode:"));
+    cutoutModeComboBox = new QComboBox();
+    cutoutModeComboBox->addItem("Perimeter", 0);
+    cutoutModeComboBox->addItem("Punchout", 1);
+    cutoutModeComboBox->addItem("Pocket", 2);
+    cutoutModeComboBox->addItem("Engrave", 3);
+    cutoutModeComboBox->setCurrentIndex(0);
+    cutoutModeLayout->addWidget(cutoutModeComboBox);
+    groupLayout->addLayout(cutoutModeLayout);
+    
+    // Stepover (for area cutting)
+    QHBoxLayout *stepoverLayout = new QHBoxLayout();
+    stepoverLayout->addWidget(new QLabel("Stepover:"));
+    stepoverSpinBox = new QDoubleSpinBox();
+    stepoverSpinBox->setRange(0.1, 1.0);
+    stepoverSpinBox->setValue(0.5);
+    stepoverSpinBox->setSingleStep(0.1);
+    stepoverSpinBox->setDecimals(2);
+    stepoverSpinBox->setSuffix(" × tool diameter");
+    stepoverLayout->addWidget(stepoverSpinBox);
+    groupLayout->addLayout(stepoverLayout);
+    
+    // Max stepover
+    QHBoxLayout *maxStepoverLayout = new QHBoxLayout();
+    maxStepoverLayout->addWidget(new QLabel("Max Stepover:"));
+    maxStepoverSpinBox = new QDoubleSpinBox();
+    maxStepoverSpinBox->setRange(0.5, 10.0);
+    maxStepoverSpinBox->setValue(2.0);
+    maxStepoverSpinBox->setSuffix(" mm");
+    maxStepoverLayout->addWidget(maxStepoverSpinBox);
+    groupLayout->addLayout(maxStepoverLayout);
+    
+    // Spiral direction (for pocketing)
+    spiralInCheckBox = new QCheckBox("Spiral Inward (for pocketing)");
+    spiralInCheckBox->setChecked(true);
+    groupLayout->addWidget(spiralInCheckBox);
+    
     // Feed rate
     QHBoxLayout *feedLayout = new QHBoxLayout();
     feedLayout->addWidget(new QLabel("Feed Rate:"));
@@ -284,6 +323,7 @@ void GCodeOptionsPanel::setupCuttingTab()
     
     // Connect signals
     connect(safetyHeightCheckBox, &QCheckBox::toggled, safetyHeightSpinBox, &QDoubleSpinBox::setEnabled);
+    connect(cutoutModeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &GCodeOptionsPanel::onCutoutModeChanged);
 }
 
 void GCodeOptionsPanel::setupTransformTab()
@@ -570,6 +610,27 @@ bool GCodeOptionsPanel::getSafetyHeightEnabled() const
 double GCodeOptionsPanel::getSafetyHeight() const
 {
     return safetyHeightSpinBox->value();
+}
+
+// Cutout mode settings
+int GCodeOptionsPanel::getCutoutMode() const
+{
+    return cutoutModeComboBox->currentIndex();
+}
+
+double GCodeOptionsPanel::getStepover() const
+{
+    return stepoverSpinBox->value();
+}
+
+double GCodeOptionsPanel::getMaxStepover() const
+{
+    return maxStepoverSpinBox->value();
+}
+
+bool GCodeOptionsPanel::getSpiralIn() const
+{
+    return spiralInCheckBox->isChecked();
 }
 
 // Discretization options
@@ -922,5 +983,12 @@ void GCodeOptionsPanel::loadProfile()
     
     // Emit signal that settings were loaded
     emit settingsLoaded();
+    emit optionsChanged();
+}
+
+void GCodeOptionsPanel::onCutoutModeChanged(int index)
+{
+    // Implement the logic to handle cutout mode changes
+    // This is a placeholder and should be replaced with the actual implementation
     emit optionsChanged();
 }

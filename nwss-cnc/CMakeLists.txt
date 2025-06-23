@@ -34,7 +34,20 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include/core
     ${CMAKE_CURRENT_SOURCE_DIR}/include/gui
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/clipper2/CPP/Clipper2Lib/include
     ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# Add Clipper2 library
+set(CLIPPER2_SOURCES
+    third_party/clipper2/CPP/Clipper2Lib/src/clipper.engine.cpp
+    third_party/clipper2/CPP/Clipper2Lib/src/clipper.offset.cpp
+    third_party/clipper2/CPP/Clipper2Lib/src/clipper.rectclip.cpp
+)
+
+add_library(clipper2 STATIC ${CLIPPER2_SOURCES})
+target_include_directories(clipper2 PUBLIC 
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/clipper2/CPP/Clipper2Lib/include>
 )
 
 set(CORE_SOURCES
@@ -48,12 +61,15 @@ set(CORE_SOURCES
     src/core/gcode_generator.cpp
     src/core/tool.cpp
     src/core/tool_offset.cpp
+    src/core/area_cutter.cpp
+    src/core/cam_processor.cpp
 )
 
 add_library(nwss-cnc-core STATIC ${CORE_SOURCES})
 target_include_directories(nwss-cnc-core PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
+target_link_libraries(nwss-cnc-core clipper2)
 
 set(GUI_SOURCES
     src/gui/mainwindow.cpp

@@ -48,7 +48,11 @@ QString SvgToGCode::convertSvgToGCode(
     bool separateRetract,
     bool linearizePaths,
     double linearizeTolerance,
-    double toolDiameter) 
+    double toolDiameter,
+    int cutoutMode,
+    double stepover,
+    double maxStepover,
+    bool spiralIn) 
 {
     QElapsedTimer totalTimer;
     totalTimer.start();
@@ -141,6 +145,13 @@ QString SvgToGCode::convertSvgToGCode(
     // Note: Tool selection should be handled by the GUI, for now disable tool offsets
     gCodeOptions.enableToolOffsets = false;
     gCodeOptions.validateFeatureSizes = false;
+    
+    // Set cutout mode parameters
+    gCodeOptions.cutoutMode = static_cast<nwss::cnc::CutoutMode>(cutoutMode);
+    gCodeOptions.stepover = stepover;
+    gCodeOptions.maxStepover = maxStepover;
+    gCodeOptions.spiralIn = spiralIn;
+    
     gCodeGen.setConfig(CNconfig);
     gCodeGen.setOptions(gCodeOptions);
     

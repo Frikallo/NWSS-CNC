@@ -1,4 +1,5 @@
 #include "core/gcode_generator.h"
+#include "core/tool_offset.h"
 #include <fstream>
 #include <sstream>
 #include <iomanip>
@@ -69,6 +70,23 @@ bool GCodeGenerator::generateGCode(const std::vector<Path>& paths, const std::st
         std::cout << "DEBUG: Using original paths without offsets - " << paths.size() << " paths" << std::endl;
     }
     
+    // Check if we need area cutting
+    std::vector<Path> finalPaths;
+    if (m_options.cutoutMode != CutoutMode::PERIMETER) {
+        std::cout << "DEBUG: Using area cutting mode: " << static_cast<int>(m_options.cutoutMode) << std::endl;
+        
+        // Convert paths to polygons
+        std::vector<Polygon> polygons = pathsToPolygons(processedPaths);
+        std::cout << "DEBUG: Converted " << processedPaths.size() << " paths to " << polygons.size() << " polygons" << std::endl;
+        
+        // Generate area cutting paths
+        finalPaths = generateAreaCuttingPaths(polygons);
+        std::cout << "DEBUG: Generated " << finalPaths.size() << " area cutting paths" << std::endl;
+    } else {
+        std::cout << "DEBUG: Using perimeter cutting mode" << std::endl;
+        finalPaths = processedPaths;
+    }
+    
     // Set precision for output
     file << std::fixed << std::setprecision(4);
     
@@ -78,8 +96,8 @@ bool GCodeGenerator::generateGCode(const std::vector<Path>& paths, const std::st
     }
     
     // Process each path
-    for (size_t pathIndex = 0; pathIndex < processedPaths.size(); pathIndex++) {
-        const auto& path = processedPaths[pathIndex];
+    for (size_t pathIndex = 0; pathIndex < finalPaths.size(); pathIndex++) {
+        const auto& path = finalPaths[pathIndex];
         if (path.empty()) continue;
         
         writePath(file, path, pathIndex);
@@ -103,6 +121,23 @@ std::string GCodeGenerator::generateGCodeString(const std::vector<Path>& paths) 
         std::cout << "DEBUG: Using original paths for string generation - " << paths.size() << " paths" << std::endl;
     }
     
+    // Check if we need area cutting
+    std::vector<Path> finalPaths;
+    if (m_options.cutoutMode != CutoutMode::PERIMETER) {
+        std::cout << "DEBUG: Using area cutting mode for string generation: " << static_cast<int>(m_options.cutoutMode) << std::endl;
+        
+        // Convert paths to polygons
+        std::vector<Polygon> polygons = pathsToPolygons(processedPaths);
+        std::cout << "DEBUG: Converted " << processedPaths.size() << " paths to " << polygons.size() << " polygons" << std::endl;
+        
+        // Generate area cutting paths
+        finalPaths = generateAreaCuttingPaths(polygons);
+        std::cout << "DEBUG: Generated " << finalPaths.size() << " area cutting paths" << std::endl;
+    } else {
+        std::cout << "DEBUG: Using perimeter cutting mode for string generation" << std::endl;
+        finalPaths = processedPaths;
+    }
+    
     std::stringstream ss;
     ss << std::fixed << std::setprecision(4);
     
@@ -112,8 +147,8 @@ std::string GCodeGenerator::generateGCodeString(const std::vector<Path>& paths) 
     }
     
     // Process each path
-    for (size_t pathIndex = 0; pathIndex < processedPaths.size(); pathIndex++) {
-        const auto& path = processedPaths[pathIndex];
+    for (size_t pathIndex = 0; pathIndex < finalPaths.size(); pathIndex++) {
+        const auto& path = finalPaths[pathIndex];
         if (path.empty()) continue;
         
         writePath(ss, path, pathIndex);
@@ -161,7 +196,30 @@ void GCodeGenerator::writeHeader(std::ostream& out) const {
     }
     
     out << "G90" << std::endl;
-    // out << "G94         ; Feed rate in units per minute" << std::endl;
+    
+    // Tool selection and offset compensation
+    const Tool* tool = m_toolRegistry.getTool(m_options.selectedToolId);
+    if (tool && m_options.enableToolOffsets) {
+        // Tool selection
+        out << "T" << tool->id << " M06" << std::endl;
+        
+        // Enable tool length compensation
+        out << "G43 H" << tool->id << std::endl;
+        
+        if (m_options.includeComments) {
+            out << "( Tool: " << tool->name << ", Diameter: " << tool->diameter << "mm )" << std::endl;
+            out << "( Tool offset compensation enabled )" << std::endl;
+        }
+    } else if (tool) {
+        // Tool selection without offset compensation
+        out << "T" << tool->id << " M06" << std::endl;
+        
+        if (m_options.includeComments) {
+            out << "( Tool: " << tool->name << ", Diameter: " << tool->diameter << "mm )" << std::endl;
+            out << "( Tool offset compensation disabled )" << std::endl;
+        }
+    }
+    
     out << "M03 S" << spindleSpeed << std::endl;
     out << "G00 Z" << safeHeight << std::endl << std::endl;
 }
@@ -170,6 +228,14 @@ void GCodeGenerator::writeFooter(std::ostream& out) const {
     if (m_options.returnToOrigin) {
         out << "G00 Z" << m_config.getSafeHeight() << std::endl;
         out << "G00 X0 Y0" << std::endl;
+    }
+    
+    // Cancel tool offset compensation if it was enabled
+    if (m_options.enableToolOffsets) {
+        out << "G49" << std::endl;
+        if (m_options.includeComments) {
+            out << "( Tool offset compensation canceled )" << std::endl;
+        }
     }
     
     out << "M05" << std::endl;
@@ -449,9 +515,36 @@ std::vector<Path> GCodeGenerator::applyToolOffsets(const std::vector<Path>& path
             std::cout << "    [" << i << "] (" << originalPoints[i].x << ", " << originalPoints[i].y << ")" << std::endl;
         }
         
-        // Calculate offset path using high-precision algorithm
-        std::cout << "  - Calling ToolOffset::calculateHighPrecisionOffset for path " << pathIndex << std::endl;
-        Path offsetPath = ToolOffset::calculateHighPrecisionOffset(path, tool->diameter, m_options.offsetDirection, 0.001);
+        // Calculate offset path using new robust algorithm
+        std::cout << "  - Calling new ToolOffset::calculateToolOffset for path " << pathIndex << std::endl;
+        
+        ToolOffset::OffsetOptions options;
+        options.minFeatureSize = 0.01; // 0.01mm minimum feature size
+        options.validateResults = true;
+        options.precision = 0.001; // High precision
+        
+        auto offsetResult = ToolOffset::calculateToolOffset(path, tool->diameter, m_options.offsetDirection, options);
+        
+        Path offsetPath;
+        if (offsetResult.success && !offsetResult.paths.empty()) {
+            offsetPath = offsetResult.paths[0]; // Use first result path
+            
+            // Log detailed results
+            std::cout << "  - Offset result: SUCCESS" << std::endl;
+            std::cout << "    - Result paths: " << offsetResult.paths.size() << std::endl;
+            std::cout << "    - Warnings: " << offsetResult.warnings.size() << std::endl;
+            std::cout << "    - Errors: " << offsetResult.errors.size() << std::endl;
+            std::cout << "    - Actual offset: " << offsetResult.actualOffsetDistance << "mm" << std::endl;
+            
+            for (const auto& warning : offsetResult.warnings) {
+                std::cout << "    WARNING: " << warning << std::endl;
+            }
+        } else {
+            std::cout << "  - Offset result: FAILED" << std::endl;
+            for (const auto& error : offsetResult.errors) {
+                std::cout << "    ERROR: " << error << std::endl;
+            }
+        }
         
         // If offset failed, use original path
         if (offsetPath.empty()) {
@@ -468,31 +561,27 @@ std::vector<Path> GCodeGenerator::applyToolOffsets(const std::vector<Path>& path
                 std::cout << "      [" << i << "] (" << offsetPoints[i].x << ", " << offsetPoints[i].y << ")" << std::endl;
             }
             
-                         // Calculate and display offset distance for verification
-             if (!originalPoints.empty() && !offsetPoints.empty()) {
-                 double dx = offsetPoints[0].x - originalPoints[0].x;
-                 double dy = offsetPoints[0].y - originalPoints[0].y;
-                 double actualOffset = std::sqrt(dx * dx + dy * dy);
-                 double expectedOffset = tool->diameter / 2.0;
-                 std::cout << "    - Actual offset distance: " << actualOffset << std::endl;
-                 std::cout << "    - Expected offset distance: " << expectedOffset << std::endl;
-                 
-                 // Safety check: if offset is way off, use original path instead
-                 double accuracyRatio = actualOffset / expectedOffset;
-                 if (accuracyRatio > 5.0 || accuracyRatio < 0.2) {
-                     std::cout << "    - Offset accuracy: FAILED (ratio: " << accuracyRatio << ") - USING ORIGINAL PATH" << std::endl;
-                     offsetPaths.pop_back(); // Remove the bad offset path
-                     offsetPaths.push_back(path); // Use original path instead
-                 } else if (std::abs(actualOffset - expectedOffset) < 0.01) {
-                     std::cout << "    - Offset accuracy: EXCELLENT" << std::endl;
-                 } else if (std::abs(actualOffset - expectedOffset) < 0.05) {
-                     std::cout << "    - Offset accuracy: GOOD" << std::endl;
-                 } else {
-                     std::cout << "    - Offset accuracy: WARNING" << std::endl;
-                 }
-             }
+            // Use the actual offset from the ToolOffset result instead of manual calculation
+            double actualOffset = offsetResult.actualOffsetDistance;
+            double expectedOffset = tool->diameter / 2.0;
+            std::cout << "    - Actual offset distance: " << actualOffset << std::endl;
+            std::cout << "    - Expected offset distance: " << expectedOffset << std::endl;
             
-            offsetPaths.push_back(offsetPath);
+            // Safety check: if offset is way off, use original path instead
+            double accuracyRatio = std::abs(actualOffset) / expectedOffset;
+            if (accuracyRatio > 2.0 || accuracyRatio < 0.5) {
+                std::cout << "    - Offset accuracy: FAILED (ratio: " << accuracyRatio << ") - USING ORIGINAL PATH" << std::endl;
+                offsetPaths.push_back(path); // Use original path instead
+            } else {
+                if (std::abs(actualOffset - expectedOffset) < 0.01) {
+                    std::cout << "    - Offset accuracy: EXCELLENT" << std::endl;
+                } else if (std::abs(actualOffset - expectedOffset) < 0.1) {
+                    std::cout << "    - Offset accuracy: GOOD" << std::endl;
+                } else {
+                    std::cout << "    - Offset accuracy: ACCEPTABLE" << std::endl;
+                }
+                offsetPaths.push_back(offsetPath); // Use offset path
+            }
         }
         
         std::cout << "  - Path " << pathIndex << " processing complete" << std::endl;
@@ -503,6 +592,75 @@ std::vector<Path> GCodeGenerator::applyToolOffsets(const std::vector<Path>& path
     std::cout << "  - Output paths: " << offsetPaths.size() << std::endl;
     
     return offsetPaths;
+}
+
+std::vector<Polygon> GCodeGenerator::pathsToPolygons(const std::vector<Path>& paths) const {
+    std::vector<Polygon> polygons;
+    
+    for (const auto& path : paths) {
+        if (path.size() < 3) {
+            continue; // Need at least 3 points for a polygon
+        }
+        
+        Polygon polygon;
+        for (const auto& point : path.getPoints()) {
+            polygon.addPoint(point);
+        }
+        
+        // Ensure the polygon is closed
+        if (!polygon.empty()) {
+            const auto& points = polygon.getPoints();
+            if (points.front().distanceTo(points.back()) > 1e-6) {
+                polygon.addPoint(points.front());
+            }
+        }
+        
+        if (polygon.size() >= 3) {
+            polygons.push_back(polygon);
+        }
+    }
+    
+    return polygons;
+}
+
+std::vector<Path> GCodeGenerator::generateAreaCuttingPaths(const std::vector<Polygon>& polygons) const {
+    std::vector<Path> areaPaths;
+    
+    // Create cutout parameters from options
+    CutoutParams cutoutParams;
+    cutoutParams.mode = m_options.cutoutMode;
+    cutoutParams.stepover = m_options.stepover;
+    cutoutParams.overlap = m_options.overlap;
+    cutoutParams.spiralIn = m_options.spiralIn;
+    cutoutParams.maxStepover = m_options.maxStepover;
+    
+    // Get the selected tool
+    const Tool* tool = m_toolRegistry.getTool(m_options.selectedToolId);
+    if (!tool) {
+        return areaPaths; // Return empty if no tool selected
+    }
+    
+    // Set up area cutter (const_cast needed for configuration)
+    AreaCutter& areaCutter = const_cast<AreaCutter&>(m_areaCutter);
+    areaCutter.setConfig(m_config);
+    areaCutter.setToolRegistry(m_toolRegistry);
+    
+    // Convert polygons to paths
+    std::vector<Path> inputPaths;
+    for (const auto& polygon : polygons) {
+        Path path(polygon.getPoints());
+        inputPaths.push_back(path);
+    }
+    
+    // Use the new area cutter API
+    auto result = areaCutter.generateAreaCuts(inputPaths, cutoutParams, m_options.selectedToolId);
+    
+    // TODO: Handle warnings and errors from result
+    if (result.success) {
+        areaPaths = result.toolpaths;
+    }
+    
+    return areaPaths;
 }
 
 } // namespace cnc

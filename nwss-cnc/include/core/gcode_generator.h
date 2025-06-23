@@ -5,6 +5,7 @@
 #include "core/config.h"
 #include "core/tool.h"
 #include "core/tool_offset.h"
+#include "core/area_cutter.h"
 #include <string>
 #include <vector>
 
@@ -36,6 +37,13 @@ struct GCodeOptions {
     bool validateFeatureSizes;    // Whether to validate feature sizes against tool
     std::string materialType;     // Material type for optimized cutting parameters
     
+    // Cutout mode options
+    CutoutMode cutoutMode;        // The type of cutting operation to perform
+    double stepover;              // Stepover distance for area cutting (as fraction of tool diameter)
+    double overlap;               // Overlap between passes (as fraction of stepover)
+    bool spiralIn;                // Whether to spiral inward for pocketing
+    double maxStepover;           // Maximum stepover in absolute units (mm)
+    
     // Constructor with default values
     GCodeOptions() : 
         comments(""),
@@ -51,7 +59,12 @@ struct GCodeOptions {
         offsetDirection(ToolOffsetDirection::AUTO),
         enableToolOffsets(true),
         validateFeatureSizes(true),
-        materialType("Unknown")
+        materialType("Unknown"),
+        cutoutMode(CutoutMode::PERIMETER),
+        stepover(0.5),
+        overlap(0.1),
+        spiralIn(true),
+        maxStepover(2.0)
     {}
 };
 
@@ -124,6 +137,7 @@ private:
     CNConfig m_config;            // CNC machine configuration
     GCodeOptions m_options;       // G-code generation options
     ToolRegistry m_toolRegistry;  // Tool registry
+    AreaCutter m_areaCutter;      // Area cutting operations
     
     /**
      * Generate the G-code header
@@ -168,6 +182,20 @@ private:
       * @return Vector of offset paths
       */
      std::vector<Path> applyToolOffsets(const std::vector<Path>& paths) const;
+     
+     /**
+      * Convert paths to polygons for area operations
+      * @param paths The input paths
+      * @return Vector of polygons
+      */
+     std::vector<Polygon> pathsToPolygons(const std::vector<Path>& paths) const;
+     
+     /**
+      * Generate area cutting paths based on cutout mode
+      * @param polygons The input polygons
+      * @return Vector of area cutting paths
+      */
+     std::vector<Path> generateAreaCuttingPaths(const std::vector<Polygon>& polygons) const;
 };
 
 } // namespace cnc

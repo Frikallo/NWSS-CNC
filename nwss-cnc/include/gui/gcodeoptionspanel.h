@@ -68,6 +68,12 @@ public:
     bool getOptimizePaths() const;
     bool getLinearizePaths() const;
     
+    // Cutout mode settings
+    int getCutoutMode() const;
+    double getStepover() const;
+    double getMaxStepover() const;
+    bool getSpiralIn() const;
+    
     // Settings management
     void saveSettings();
     void loadSettings();
@@ -87,6 +93,7 @@ private slots:
     void onToolTypeChanged(const QString &toolType);
     void updateUnitDisplay(bool isMetric);
     void onMaterialChanged();
+    void onCutoutModeChanged(int index);
 
 private:
     // Tab widget for organizing settings
@@ -115,6 +122,12 @@ private:
     QSpinBox *passCountSpinBox;
     QCheckBox *safetyHeightCheckBox;
     QDoubleSpinBox *safetyHeightSpinBox;
+    
+    // Cutout mode settings
+    QComboBox *cutoutModeComboBox;
+    QDoubleSpinBox *stepoverSpinBox;
+    QDoubleSpinBox *maxStepoverSpinBox;
+    QCheckBox *spiralInCheckBox;
     
     // Discretization options
     QSpinBox *bezierSamplesSpinBox;

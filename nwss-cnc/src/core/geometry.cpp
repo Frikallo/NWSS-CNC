@@ -1,5 +1,6 @@
 #include "core/geometry.h"
 #include <functional>
+#include <algorithm>
 
 namespace nwss {
 namespace cnc {
@@ -78,6 +79,83 @@ Path Path::simplify(double tolerance) const {
     }
     
     return simplified;
+}
+
+bool Polygon::containsPoint(const Point2D& point) const {
+    if (m_points.size() < 3) {
+        return false;
+    }
+    
+    // Ray casting algorithm
+    bool inside = false;
+    size_t j = m_points.size() - 1;
+    
+    for (size_t i = 0; i < m_points.size(); i++) {
+        if (((m_points[i].y > point.y) != (m_points[j].y > point.y)) &&
+            (point.x < (m_points[j].x - m_points[i].x) * (point.y - m_points[i].y) / 
+                      (m_points[j].y - m_points[i].y) + m_points[i].x)) {
+            inside = !inside;
+        }
+        j = i;
+    }
+    
+    return inside;
+}
+
+double Polygon::area() const {
+    if (m_points.size() < 3) {
+        return 0.0;
+    }
+    
+    // Shoelace formula
+    double area = 0.0;
+    size_t j = m_points.size() - 1;
+    
+    for (size_t i = 0; i < m_points.size(); i++) {
+        area += (m_points[j].x + m_points[i].x) * (m_points[j].y - m_points[i].y);
+        j = i;
+    }
+    
+    return std::abs(area) / 2.0;
+}
+
+bool Polygon::isClockwise() const {
+    if (m_points.size() < 3) {
+        return false;
+    }
+    
+    // Calculate signed area using shoelace formula
+    double signedArea = 0.0;
+    size_t j = m_points.size() - 1;
+    
+    for (size_t i = 0; i < m_points.size(); i++) {
+        signedArea += (m_points[j].x - m_points[i].x) * (m_points[j].y + m_points[i].y);
+        j = i;
+    }
+    
+    // Positive area = clockwise in screen coordinates
+    return signedArea > 0;
+}
+
+void Polygon::reverse() {
+    std::reverse(m_points.begin(), m_points.end());
+}
+
+void Polygon::getBounds(double& minX, double& minY, double& maxX, double& maxY) const {
+    if (m_points.empty()) {
+        minX = minY = maxX = maxY = 0.0;
+        return;
+    }
+    
+    minX = maxX = m_points[0].x;
+    minY = maxY = m_points[0].y;
+    
+    for (const auto& point : m_points) {
+        minX = std::min(minX, point.x);
+        minY = std::min(minY, point.y);
+        maxX = std::max(maxX, point.x);
+        maxY = std::max(maxY, point.y);
+    }
 }
 
 } // namespace cnc
